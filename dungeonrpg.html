@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donjon ASCII - RPG d'Exploration</title>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .game-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+        }
+        
+        .main-game {
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #00ff00;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .panel {
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #00ff41;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        
+        .game-map {
+            background: #000;
+            border: 1px solid #333;
+            padding: 10px;
+            margin: 15px 0;
+            font-size: 14px;
+            line-height: 1.2;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .btn {
+            background: linear-gradient(45deg, #0f3460, #16537e);
+            color: #00ff00;
+            border: 2px solid #00ff41;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+        
+        .btn:hover {
+            background: linear-gradient(45deg, #16537e, #0f3460);
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.5);
+            transform: translateY(-2px);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .stat-bar {
+            background: #333;
+            height: 20px;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 5px 0;
+            border: 1px solid #555;
+        }
+        
+        .stat-fill {
+            height: 100%;
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+        
+        .health { background: linear-gradient(90deg, #ff0000, #ff6666); }
+        .mana { background: linear-gradient(90deg, #0066ff, #6666ff); }
+        .exp { background: linear-gradient(90deg, #ffaa00, #ffdd66); }
+        
+        .message-log {
+            background: #000;
+            border: 1px solid #333;
+            height: 120px;
+            overflow-y: auto;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 12px;
+        }
+        
+        .message {
+            margin: 2px 0;
+            padding: 2px;
+        }
+        
+        .combat { color: #ff6666; }
+        .info { color: #66ccff; }
+        .success { color: #66ff66; }
+        
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+            margin: 10px 0;
+        }
+        
+        .item-slot {
+            background: #222;
+            border: 1px solid #444;
+            padding: 8px;
+            text-align: center;
+            border-radius: 4px;
+            min-height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .item-slot:hover {
+            background: #333;
+            border-color: #00ff41;
+        }
+        
+        .item-slot.has-item {
+            background: #2a4a2a;
+            border-color: #00ff41;
+        }
+        
+        h2 {
+            color: #00ff41;
+            margin: 0 0 10px 0;
+            text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+        }
+        
+        h3 {
+            color: #66ccff;
+            margin: 10px 0 5px 0;
+        }
+        
+        .player-char {
+            color: #ffff00;
+            font-weight: bold;
+            text-shadow: 0 0 8px #ffff00;
+        }
+        
+        .enemy-char {
+            color: #ff0000;
+            font-weight: bold;
+            text-shadow: 0 0 8px #ff0000;
+        }
+        
+        .treasure-char {
+            color: #ffd700;
+            font-weight: bold;
+            text-shadow: 0 0 8px #ffd700;
+        }
+        
+        .portal-char {
+            color: #ff00ff;
+            font-weight: bold;
+            text-shadow: 0 0 12px #ff00ff;
+            animation: portalPulse 2s infinite;
+        }
+        
+        @keyframes portalPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        @media (max-width: 768px) {
+            .game-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="main-game">
+            <h2>🗡️ DONJON ASCII - EXPLORATION 🛡️</h2>
+            
+            <div class="game-map" id="gameMap"></div>
+            
+            <div class="controls">
+                <button class="btn" onclick="movePlayer(-1, 0)">← Ouest</button>
+                <button class="btn" onclick="movePlayer(0, -1)">↑ Nord</button>
+                <button class="btn" onclick="movePlayer(1, 0)">→ Est</button>
+                <button class="btn" onclick="movePlayer(0, 1)">↓ Sud</button>
+                <button class="btn" onclick="usePotion()">🧪 Potion</button>
+                <button class="btn" onclick="castSpell()">✨ Sort</button>
+            </div>
+            
+            <div class="message-log" id="messageLog"></div>
+        </div>
+        
+        <div class="sidebar">
+            <div class="panel">
+                <h3>👤 Héros</h3>
+                <div>Niveau: <span id="playerLevel">1</span></div>
+                <div>Donjon: <span id="dungeonLevel">1</span> 🏰</div>
+                <div>Or: <span id="playerGold">0</span> 💰</div>
+                
+                <div style="margin: 10px 0;">
+                    <div>Vie: <span id="healthText">100/100</span></div>
+                    <div class="stat-bar">
+                        <div class="stat-fill health" id="healthBar" style="width: 100%"></div>
+                    </div>
+                </div>
+                
+                <div style="margin: 10px 0;">
+                    <div>Mana: <span id="manaText">50/50</span></div>
+                    <div class="stat-bar">
+                        <div class="stat-fill mana" id="manaBar" style="width: 100%"></div>
+                    </div>
+                </div>
+                
+                <div style="margin: 10px 0;">
+                    <div>Exp: <span id="expText">0/100</span></div>
+                    <div class="stat-bar">
+                        <div class="stat-fill exp" id="expBar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h3>🎒 Inventaire</h3>
+                <div class="inventory-grid" id="inventory">
+                    <div class="item-slot">🧪</div>
+                    <div class="item-slot">🧪</div>
+                    <div class="item-slot">⚔️</div>
+                    <div class="item-slot"></div>
+                    <div class="item-slot"></div>
+                    <div class="item-slot"></div>
+                    <div class="item-slot"></div>
+                    <div class="item-slot"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // État du jeu
+        let gameState = {
+            player: {
+                x: 1,
+                y: 1,
+                health: 100,
+                maxHealth: 100,
+                mana: 50,
+                maxMana: 50,
+                level: 1,
+                exp: 0,
+                expToNext: 100,
+                gold: 0,
+                inventory: {
+                    potions: 2,
+                    sword: 1,
+                    keys: 0
+                }
+            },
+            enemies: [],
+            treasures: [],
+            mapWidth: 11,
+            mapHeight: 11,
+            messages: [],
+            dungeonLevel: 1,
+            portalActive: false,
+            portal: {x: 9, y: 9}
+        };
+
+        // Générer un nouveau donjon
+        function generateNewDungeon() {
+            // Réinitialiser position du joueur
+            gameState.player.x = 1;
+            gameState.player.y = 1;
+            
+            // Générer nouveaux ennemis
+            gameState.enemies = generateEnemies();
+            
+            // Générer nouveaux trésors
+            gameState.treasures = generateTreasures();
+            
+            // Désactiver le portail
+            gameState.portalActive = false;
+            
+            // Augmenter le niveau du donjon
+            gameState.dungeonLevel++;
+            
+            addMessage(`=== DONJON NIVEAU ${gameState.dungeonLevel} ===`, "success");
+            addMessage("Un nouveau défi vous attend!", "info");
+        }
+
+        // Générer les ennemis selon le niveau
+        function generateEnemies() {
+            const baseEnemies = [
+                {type: 'Gobelin', symbol: 'G', baseHealth: 25},
+                {type: 'Squelette', symbol: 'S', baseHealth: 20},
+                {type: 'Orc', symbol: 'O', baseHealth: 35},
+                {type: 'Troll', symbol: 'T', baseHealth: 30}
+            ];
+            
+            const enemyPositions = [
+                {x: 3, y: 1}, {x: 7, y: 1}, {x: 9, y: 3},
+                {x: 9, y: 7}, {x: 7, y: 9}, {x: 3, y: 9},
+                {x: 1, y: 7}, {x: 1, y: 3}
+            ];
+            
+            let enemies = [];
+            let numEnemies = Math.min(4 + gameState.dungeonLevel, 8);
+            
+            for (let i = 0; i < numEnemies; i++) {
+                let enemyTemplate = baseEnemies[Math.floor(Math.random() * baseEnemies.length)];
+                let position = enemyPositions[i];
+                
+                enemies.push({
+                    x: position.x,
+                    y: position.y,
+                    health: enemyTemplate.baseHealth + (gameState.dungeonLevel - 1) * 10,
+                    type: enemyTemplate.type,
+                    symbol: enemyTemplate.symbol
+                });
+            }
+            
+            return enemies;
+        }
+
+        // Générer les trésors
+        function generateTreasures() {
+            const treasurePositions = [
+                {x: 5, y: 1}, {x: 1, y: 5}, {x: 9, y: 5}, {x: 5, y: 9}
+            ];
+            
+            let treasures = [];
+            treasurePositions.forEach((pos, index) => {
+                let treasure;
+                if (index === 0) {
+                    treasure = {x: pos.x, y: pos.y, type: 'or', value: 50 + gameState.dungeonLevel * 25};
+                } else if (index === 1) {
+                    treasure = {x: pos.x, y: pos.y, type: 'potion', value: 1};
+                } else if (index === 2) {
+                    treasure = {x: pos.x, y: pos.y, type: 'or', value: 75 + gameState.dungeonLevel * 30};
+                } else {
+                    treasure = {x: pos.x, y: pos.y, type: 'clé', value: 1};
+                }
+                treasures.push(treasure);
+            });
+            
+            return treasures;
+        }
+
+        // Génération de la carte avec couloirs et salles
+        function generateMap() {
+            let map = '';
+            for (let y = 0; y < gameState.mapHeight; y++) {
+                for (let x = 0; x < gameState.mapWidth; x++) {
+                    let cell = getMapCell(x, y);
+                    
+                    // Joueur
+                    if (x === gameState.player.x && y === gameState.player.y) {
+                        cell = '<span class="player-char">@</span>';
+                    }
+                    
+                    // Portail (si tous les ennemis sont vaincus)
+                    if (gameState.portalActive && x === gameState.portal.x && y === gameState.portal.y) {
+                        cell = '<span class="portal-char">Ω</span>';
+                    }
+                    
+                    // Ennemis
+                    gameState.enemies.forEach(enemy => {
+                        if (x === enemy.x && y === enemy.y && enemy.health > 0) {
+                            cell = `<span class="enemy-char">${enemy.symbol}</span>`;
+                        }
+                    });
+                    
+                    // Trésors
+                    gameState.treasures.forEach(treasure => {
+                        if (x === treasure.x && y === treasure.y) {
+                            cell = '<span class="treasure-char">$</span>';
+                        }
+                    });
+                    
+                    map += cell + ' ';
+                }
+                map += '\n';
+            }
+            return map;
+        }
+
+        // Définition du donjon avec couloirs et salles
+        function getMapCell(x, y) {
+            // Carte prédéfinie avec couloirs et salles
+            const dungeonMap = [
+                "###########",
+                "#.........#",
+                "#.###.###.#",
+                "#...#.#...#",
+                "###.#.#.###",
+                "#...#.#...#",
+                "#.###.###.#",
+                "#.........#",
+                "#.#######.#",
+                "#.........#",
+                "###########"
+            ];
+            
+            return dungeonMap[y][x];
+        }
+
+        // Mouvement du joueur
+        function movePlayer(dx, dy) {
+            let newX = gameState.player.x + dx;
+            let newY = gameState.player.y + dy;
+            
+            // Vérifier les limites et murs
+            if (getMapCell(newX, newY) === '#') {
+                addMessage("Un mur bloque votre passage.", "info");
+                return;
+            }
+            
+            // Vérifier les ennemis
+            let enemy = gameState.enemies.find(e => e.x === newX && e.y === newY && e.health > 0);
+            if (enemy) {
+                combat(enemy);
+                return;
+            }
+            
+            // Vérifier le portail
+            if (gameState.portalActive && newX === gameState.portal.x && newY === gameState.portal.y) {
+                generateNewDungeon();
+                updateDisplay();
+                return;
+            }
+            
+            // Mouvement valide
+            gameState.player.x = newX;
+            gameState.player.y = newY;
+            
+            // Vérifier les trésors
+            let treasureIndex = gameState.treasures.findIndex(t => t.x === newX && t.y === newY);
+            if (treasureIndex !== -1) {
+                collectTreasure(treasureIndex);
+            }
+            
+            updateDisplay();
+        }
+
+        // Combat
+        function combat(enemy) {
+            let playerDamage = Math.floor(Math.random() * 20) + 10 + (gameState.player.level * 2);
+            let enemyDamage = Math.floor(Math.random() * 15) + 5;
+            
+            enemy.health -= playerDamage;
+            addMessage(`Vous attaquez ${enemy.type} pour ${playerDamage} dégâts!`, "combat");
+            
+            if (enemy.health <= 0) {
+                let expGain = Math.floor(Math.random() * 30) + 20 + (gameState.dungeonLevel * 5);
+                let goldGain = Math.floor(Math.random() * 25) + 10 + (gameState.dungeonLevel * 5);
+                
+                gameState.player.exp += expGain;
+                gameState.player.gold += goldGain;
+                
+                addMessage(`${enemy.type} vaincu! +${expGain} EXP, +${goldGain} or`, "success");
+                
+                // Vérifier si tous les ennemis sont vaincus
+                let aliveEnemies = gameState.enemies.filter(e => e.health > 0);
+                if (aliveEnemies.length === 0) {
+                    gameState.portalActive = true;
+                    addMessage("Tous les ennemis vaincus! Un portail magique (Ω) apparaît!", "success");
+                    addMessage("Dirigez-vous vers le portail pour le prochain donjon!", "info");
+                }
+                
+                // Vérifier le niveau
+                if (gameState.player.exp >= gameState.player.expToNext) {
+                    levelUp();
+                }
+            } else {
+                gameState.player.health -= enemyDamage;
+                addMessage(`${enemy.type} vous attaque pour ${enemyDamage} dégâts!`, "combat");
+                
+                if (gameState.player.health <= 0) {
+                    gameState.player.health = 1;
+                    addMessage("Vous êtes gravement blessé!", "combat");
+                }
+            }
+            
+            updateDisplay();
+        }
+
+        // Montée de niveau
+        function levelUp() {
+            gameState.player.level++;
+            gameState.player.exp -= gameState.player.expToNext;
+            gameState.player.expToNext = Math.floor(gameState.player.expToNext * 1.5);
+            gameState.player.maxHealth += 20;
+            gameState.player.health = gameState.player.maxHealth;
+            gameState.player.maxMana += 10;
+            gameState.player.mana = gameState.player.maxMana;
+            
+            addMessage(`NIVEAU ${gameState.player.level}! Santé et mana restaurées!`, "success");
+        }
+
+        // Collecte de trésor
+        function collectTreasure(index) {
+            let treasure = gameState.treasures[index];
+            
+            if (treasure.type === 'or') {
+                gameState.player.gold += treasure.value;
+                addMessage(`Vous trouvez ${treasure.value} pièces d'or!`, "success");
+            } else if (treasure.type === 'potion') {
+                gameState.player.inventory.potions += treasure.value;
+                addMessage("Vous trouvez une potion de soin!", "success");
+            } else if (treasure.type === 'clé') {
+                gameState.player.inventory.keys += treasure.value;
+                addMessage("Vous trouvez une clé mystérieuse!", "success");
+            }
+            
+            gameState.treasures.splice(index, 1);
+            updateDisplay();
+        }
+
+        // Utiliser une potion
+        function usePotion() {
+            if (gameState.player.inventory.potions > 0) {
+                let healAmount = 30 + Math.floor(Math.random() * 20);
+                gameState.player.health = Math.min(gameState.player.maxHealth, 
+                                                  gameState.player.health + healAmount);
+                gameState.player.inventory.potions--;
+                addMessage(`Vous buvez une potion et récupérez ${healAmount} PV!`, "success");
+                updateDisplay();
+            } else {
+                addMessage("Vous n'avez pas de potion!", "info");
+            }
+        }
+
+        // Lancer un sort
+        function castSpell() {
+            if (gameState.player.mana >= 20) {
+                gameState.player.mana -= 20;
+                
+                // Trouver l'ennemi le plus proche
+                let nearestEnemy = null;
+                let minDistance = Infinity;
+                
+                gameState.enemies.forEach(enemy => {
+                    if (enemy.health > 0) {
+                        let distance = Math.abs(enemy.x - gameState.player.x) + 
+                                     Math.abs(enemy.y - gameState.player.y);
+                        if (distance < minDistance && distance <= 3) {
+                            minDistance = distance;
+                            nearestEnemy = enemy;
+                        }
+                    }
+                });
+                
+                if (nearestEnemy) {
+                    let damage = 25 + Math.floor(Math.random() * 15);
+                    nearestEnemy.health -= damage;
+                    addMessage(`Éclair magique! ${nearestEnemy.type} subit ${damage} dégâts!`, "combat");
+                    
+                    if (nearestEnemy.health <= 0) {
+                        let expGain = Math.floor(Math.random() * 30) + 20;
+                        let goldGain = Math.floor(Math.random() * 25) + 10;
+                        gameState.player.exp += expGain;
+                        gameState.player.gold += goldGain;
+                        addMessage(`${nearestEnemy.type} vaincu! +${expGain} EXP, +${goldGain} or`, "success");
+                    }
+                } else {
+                    addMessage("Aucun ennemi à portée pour votre sort!", "info");
+                }
+                
+                updateDisplay();
+            } else {
+                addMessage("Pas assez de mana!", "info");
+            }
+        }
+
+        // Ajouter un message
+        function addMessage(text, type = "info") {
+            gameState.messages.push({text, type, time: Date.now()});
+            if (gameState.messages.length > 20) {
+                gameState.messages.shift();
+            }
+            
+            let messageLog = document.getElementById('messageLog');
+            messageLog.innerHTML = gameState.messages
+                .map(msg => `<div class="message ${msg.type}">${msg.text}</div>`)
+                .join('');
+            messageLog.scrollTop = messageLog.scrollHeight;
+        }
+
+        // Mettre à jour l'affichage
+        function updateDisplay() {
+            // Carte
+            document.getElementById('gameMap').innerHTML = generateMap();
+            
+            // Stats du joueur
+            document.getElementById('playerLevel').textContent = gameState.player.level;
+            document.getElementById('dungeonLevel').textContent = gameState.dungeonLevel;
+            document.getElementById('playerGold').textContent = gameState.player.gold;
+            
+            // Barres de vie/mana/exp
+            let healthPercent = (gameState.player.health / gameState.player.maxHealth) * 100;
+            let manaPercent = (gameState.player.mana / gameState.player.maxMana) * 100;
+            let expPercent = (gameState.player.exp / gameState.player.expToNext) * 100;
+            
+            document.getElementById('healthBar').style.width = healthPercent + '%';
+            document.getElementById('manaBar').style.width = manaPercent + '%';
+            document.getElementById('expBar').style.width = expPercent + '%';
+            
+            document.getElementById('healthText').textContent = 
+                `${gameState.player.health}/${gameState.player.maxHealth}`;
+            document.getElementById('manaText').textContent = 
+                `${gameState.player.mana}/${gameState.player.maxMana}`;
+            document.getElementById('expText').textContent = 
+                `${gameState.player.exp}/${gameState.player.expToNext}`;
+            
+            // Inventaire
+            let inventorySlots = document.querySelectorAll('.item-slot');
+            inventorySlots[0].textContent = gameState.player.inventory.potions > 0 ? '🧪' : '';
+            inventorySlots[0].className = gameState.player.inventory.potions > 0 ? 'item-slot has-item' : 'item-slot';
+            inventorySlots[1].textContent = gameState.player.inventory.potions > 1 ? '🧪' : '';
+            inventorySlots[1].className = gameState.player.inventory.potions > 1 ? 'item-slot has-item' : 'item-slot';
+            inventorySlots[2].textContent = '⚔️';
+            inventorySlots[2].className = 'item-slot has-item';
+            
+            if (gameState.player.inventory.keys > 0) {
+                inventorySlots[3].textContent = '🗝️';
+                inventorySlots[3].className = 'item-slot has-item';
+            }
+        }
+
+        // Contrôles clavier
+        document.addEventListener('keydown', function(e) {
+            switch(e.key) {
+                case 'ArrowUp':
+                case 'w':
+                case 'W':
+                    movePlayer(0, -1);
+                    break;
+                case 'ArrowDown':
+                case 's':
+                case 'S':
+                    movePlayer(0, 1);
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                case 'A':
+                    movePlayer(-1, 0);
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                case 'D':
+                    movePlayer(1, 0);
+                    break;
+                case 'p':
+                case 'P':
+                    usePotion();
+                    break;
+                case 'm':
+                case 'M':
+                    castSpell();
+                    break;
+            }
+        });
+
+        // Initialisation
+        generateNewDungeon(); // Générer le premier donjon
+        addMessage("Bienvenue dans les Donjons ASCII! Explorez avec les flèches ou WASD.", "info");
+        addMessage("Combattez les ennemis (G,S,O,T), trouvez les trésors ($)!", "info");
+        addMessage("Utilisez P pour les potions et M pour la magie.", "info");
+        updateDisplay();
+    </script>
+</body>
+</html>
