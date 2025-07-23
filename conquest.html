@@ -1,1012 +1,1068 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Crown, Sword, Shield, Coins, Users, MapPin, ZoomIn, ZoomOut } from 'lucide-react';
-
-const ConquestGame = () => {
-  const [gameState, setGameState] = useState({
-    currentPlayer: 1,
-    turn: 1,
-    phase: 'initialDeploy',
-    players: {
-      1: { name: 'You', armies: 8, territories: [], color: 'bg-blue-500' },
-      2: { name: 'Claude', armies: 8, territories: [], color: 'bg-red-500' }
-    },
-    selectedTerritory: null,
-    targetTerritory: null,
-    gameStarted: false,
-    winner: null,
-    aiAction: null,
-    glowingTerritory: null,
-    aiThinking: false
-  });
-
-  const [zoomLevel, setZoomLevel] = useState(1);
-
-  const territoryStatesRef = useRef({});
-
-  const territories = [
-    { id: 1, name: 'Northern Kingdom', x: 50, y: 10, neighbors: [2, 3, 6] },
-    { id: 2, name: 'Mystic Forest', x: 25, y: 25, neighbors: [1, 3, 4, 6, 7] },
-    { id: 3, name: 'High Mountains', x: 75, y: 25, neighbors: [1, 2, 5, 6, 8] },
-    { id: 4, name: 'Fertile Valley', x: 0, y: 40, neighbors: [2, 7, 9] },
-    { id: 5, name: 'Burning Desert', x: 100, y: 40, neighbors: [3, 8, 10] },
-    { id: 6, name: 'Central Plains', x: 50, y: 40, neighbors: [1, 2, 3, 7, 8, 11] },
-    { id: 7, name: 'Dark Swamps', x: 25, y: 55, neighbors: [2, 4, 6, 9, 11, 12] },
-    { id: 8, name: 'Green Hills', x: 75, y: 55, neighbors: [3, 5, 6, 10, 11, 13] },
-    { id: 9, name: 'Western Port', x: 0, y: 70, neighbors: [4, 7, 12, 14] },
-    { id: 10, name: 'Red Lands', x: 100, y: 70, neighbors: [5, 8, 13, 15] },
-    { id: 11, name: 'Heart of the Realm', x: 50, y: 70, neighbors: [6, 7, 8, 12, 13, 16] },
-    { id: 12, name: 'Frozen Lakes', x: 25, y: 85, neighbors: [7, 9, 11, 14, 16, 18] },
-    { id: 13, name: 'Wild Steppes', x: 75, y: 85, neighbors: [8, 10, 11, 15, 16, 17] },
-    { id: 14, name: 'Riffault Bay', x: 0, y: 100, neighbors: [9, 12, 18] },
-    { id: 15, name: 'Volcanic Islands', x: 100, y: 100, neighbors: [10, 13, 17] },
-    { id: 16, name: 'Central Market', x: 50, y: 100, neighbors: [11, 12, 13, 17, 18] },
-    { id: 17, name: 'Final Citadel', x: 75, y: 115, neighbors: [13, 15, 16, 18] },
-    { id: 18, name: 'Ancient Temple', x: 25, y: 115, neighbors: [12, 14, 16, 17] }
-  ];
-
-  const [territoryStates, setTerritoryStates] = useState({});
-
-  useEffect(() => {
-    territoryStatesRef.current = territoryStates;
-  }, [territoryStates]);
-
-  const initializeGame = () => {
-    const shuffledTerritories = [...territories].sort(() => Math.random() - 0.5);
-    const newTerritoryStates = {};
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conquest! Conquer all territories!</title>
     
-    shuffledTerritories.forEach((territory, index) => {
-      const owner = index < 9 ? 1 : 2;
-      newTerritoryStates[territory.id] = { owner, armies: 1 };
-    });
-
-    const player1Territories = Object.keys(newTerritoryStates).filter(id => newTerritoryStates[id].owner === 1).map(Number);
-    const player2Territories = Object.keys(newTerritoryStates).filter(id => newTerritoryStates[id].owner === 2).map(Number);
-
-    setTerritoryStates(newTerritoryStates);
-    setGameState(prev => ({
-      ...prev,
-      gameStarted: true,
-      currentPlayer: 1,
-      phase: 'initialDeploy',
-      players: {
-        1: { ...prev.players[1], territories: player1Territories, armies: 8 },
-        2: { ...prev.players[2], territories: player2Territories, armies: 8 }
-      },
-      aiThinking: false
-    }));
-  };
-
-  const getTerritoryOwner = (territoryId) => {
-    const states = territoryStatesRef.current || territoryStates;
-    return states[territoryId]?.owner || null;
-  };
-
-  const getTerritoryArmies = (territoryId) => {
-    const states = territoryStatesRef.current || territoryStates;
-    return states[territoryId]?.armies || 0;
-  };
-
-  const isNeighbor = (territory1, territory2) => {
-    const t1 = territories.find(t => t.id === territory1);
-    return t1?.neighbors.includes(territory2);
-  };
-
-  const canAttack = (fromId, toId) => {
-    return getTerritoryOwner(fromId) === gameState.currentPlayer &&
-           getTerritoryOwner(toId) !== gameState.currentPlayer &&
-           getTerritoryArmies(fromId) > 1 &&
-           isNeighbor(fromId, toId);
-  };
-
-  const canFortify = (fromId, toId) => {
-    return getTerritoryOwner(fromId) === gameState.currentPlayer &&
-           getTerritoryOwner(toId) === gameState.currentPlayer &&
-           getTerritoryArmies(fromId) > 1 &&
-           isNeighbor(fromId, toId) &&
-           fromId !== toId;
-  };
-
-  const checkWinCondition = useCallback(() => {
-    const currentStates = territoryStatesRef.current || territoryStates;
-    const player1Territories = Object.keys(currentStates).filter(id => currentStates[parseInt(id)]?.owner === 1);
-    const player2Territories = Object.keys(currentStates).filter(id => currentStates[parseInt(id)]?.owner === 2);
+    <!-- React et ReactDOM via CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
-    if (player1Territories.length === 0) {
-      setGameState(prev => ({ ...prev, winner: 2, aiAction: null, aiThinking: false }));
-      return true;
-    } else if (player2Territories.length === 0) {
-      setGameState(prev => ({ ...prev, winner: 1, aiAction: null, aiThinking: false }));
-      return true;
-    }
-    return false;
-  }, [territoryStates]);
-
-  const nextPhase = useCallback(() => {
-    if (checkWinCondition()) return;
-
-    setGameState(prev => {
-      if (prev.phase === 'initialDeploy') {
-        const nextPlayer = prev.currentPlayer === 1 ? 2 : 1;
-        
-        if (prev.players[prev.currentPlayer].armies === 0) {
-          if (prev.players[nextPlayer].armies === 0) {
-            return {
-              ...prev,
-              currentPlayer: 1,
-              phase: 'attack',
-              selectedTerritory: null,
-              aiThinking: false
-            };
-          } else {
-            return { 
-              ...prev, 
-              currentPlayer: nextPlayer, 
-              selectedTerritory: null,
-              aiThinking: false
-            };
-          }
-        } else {
-          return { 
-            ...prev, 
-            currentPlayer: nextPlayer, 
-            selectedTerritory: null,
-            aiThinking: false
-          };
+    <!-- Babel pour transformer le JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        @keyframes glow {
+            0%, 100% { r: 4; opacity: 1; }
+            50% { r: 5; opacity: 0.8; }
         }
-      } else if (prev.phase === 'deploy') {
-        return { ...prev, phase: 'attack', selectedTerritory: null };
-      } else if (prev.phase === 'attack') {
-        return { ...prev, phase: 'fortify', selectedTerritory: null };
-      } else if (prev.phase === 'fortify') {
-        const nextPlayer = prev.currentPlayer === 1 ? 2 : 1;
-        const currentStates = territoryStatesRef.current || territoryStates;
-        const playerTerritories = Object.keys(currentStates).filter(id => currentStates[parseInt(id)]?.owner === nextPlayer);
-        
-        // Pas de minimum de 3, juste territoires/3 arrondi à l'inférieur
-        const newArmies = Math.floor(playerTerritories.length / 3);
-        
-        return {
-          ...prev,
-          currentPlayer: nextPlayer,
-          phase: 'deploy',
-          turn: nextPlayer === 1 ? prev.turn + 1 : prev.turn,
-          selectedTerritory: null,
-          players: {
-            ...prev.players,
-            [nextPlayer]: {
-              ...prev.players[nextPlayer],
-              armies: newArmies
-            }
-          },
-          aiThinking: false
-        };
-      }
-      return prev;
-    });
-  }, [checkWinCondition, territoryStates]);
-
-  const deployArmy = useCallback((territoryId) => {
-    if (getTerritoryOwner(territoryId) === gameState.currentPlayer && 
-        gameState.players[gameState.currentPlayer].armies > 0) {
-      
-      // Mise à jour immédiate des territoires
-      setTerritoryStates(prev => ({
-        ...prev,
-        [territoryId]: { 
-          ...prev[territoryId], 
-          armies: prev[territoryId].armies + 1 
+        .glowing {
+            animation: glow 0.6s ease-in-out infinite;
         }
-      }));
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useCallback, useEffect, useRef } = React;
+        
+        // Icônes simplifiées en SVG
+        const Crown = ({className}) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+        );
+        
+        const Sword = ({className}) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+        );
+        
+        const Shield = ({className}) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+        );
+        
+        const Users = ({className}) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+        );
+        
+        const MapPin = ({className}) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+        );
+        
+        const ZoomIn = ({className}) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
+            </svg>
+        );
+        
+        const ZoomOut = ({className}) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
+            </svg>
+        );
 
-      // Mise à jour du gameState avec un léger délai pour la phase initiale
-      // pour permettre de voir la mise à jour visuelle
-      const updateGameState = () => {
-        setGameState(prev => {
-          const newArmies = prev.players[prev.currentPlayer].armies - 1;
-          const updatedState = {
-            ...prev,
+        const ConquestGame = () => {
+          const [gameState, setGameState] = useState({
+            currentPlayer: 1,
+            turn: 1,
+            phase: 'initialDeploy',
             players: {
-              ...prev.players,
-              [prev.currentPlayer]: {
-                ...prev.players[prev.currentPlayer],
-                armies: newArmies
-              }
-            }
-          };
-
-          if (prev.phase === 'initialDeploy' && newArmies === 0) {
-            const nextPlayer = prev.currentPlayer === 1 ? 2 : 1;
-            if (prev.players[nextPlayer].armies === 0) {
-              return {
-                ...updatedState,
-                currentPlayer: 1,
-                phase: 'attack',
-                aiThinking: false
-              };
-            } else {
-              return { 
-                ...updatedState, 
-                currentPlayer: nextPlayer,
-                aiThinking: false
-              };
-            }
-          } else if (prev.phase === 'initialDeploy') {
-            const nextPlayer = prev.currentPlayer === 1 ? 2 : 1;
-            return { 
-              ...updatedState, 
-              currentPlayer: nextPlayer,
-              aiThinking: false
-            };
-          }
-
-          return updatedState;
-        });
-      };
-
-      // Pour le joueur humain, ajouter un petit délai pour voir la mise à jour
-      if (gameState.currentPlayer === 1) {
-        setTimeout(updateGameState, 200);
-      } else {
-        updateGameState();
-      }
-      
-      return true;
-    }
-    return false;
-  }, [gameState.currentPlayer, gameState.players, gameState.phase]);
-
-  const handleTerritoryClick = (territoryId) => {
-    if (!gameState.gameStarted || gameState.winner || 
-        gameState.currentPlayer === 2 || gameState.aiAction || gameState.aiThinking) return;
-
-    if (gameState.phase === 'initialDeploy' || gameState.phase === 'deploy') {
-      if (getTerritoryOwner(territoryId) === gameState.currentPlayer && 
-          gameState.players[gameState.currentPlayer].armies > 0) {
-        deployArmy(territoryId);
-      }
-    } else if (gameState.phase === 'attack') {
-      if (!gameState.selectedTerritory) {
-        if (getTerritoryOwner(territoryId) === gameState.currentPlayer && 
-            getTerritoryArmies(territoryId) > 1) {
-          setGameState(prev => ({ ...prev, selectedTerritory: territoryId }));
-        }
-      } else if (gameState.selectedTerritory === territoryId) {
-        setGameState(prev => ({ ...prev, selectedTerritory: null }));
-      } else if (canAttack(gameState.selectedTerritory, territoryId)) {
-        performAttack(gameState.selectedTerritory, territoryId);
-        // Déselectionner après l'attaque avec un petit délai pour voir le résultat
-        setTimeout(() => {
-          setGameState(prev => ({ ...prev, selectedTerritory: null }));
-        }, 100);
-      } else {
-        if (getTerritoryOwner(territoryId) === gameState.currentPlayer && 
-            getTerritoryArmies(territoryId) > 1) {
-          setGameState(prev => ({ ...prev, selectedTerritory: territoryId }));
-        } else {
-          setGameState(prev => ({ ...prev, selectedTerritory: null }));
-        }
-      }
-    } else if (gameState.phase === 'fortify') {
-      if (!gameState.selectedTerritory) {
-        if (getTerritoryOwner(territoryId) === gameState.currentPlayer && 
-            getTerritoryArmies(territoryId) > 1) {
-          setGameState(prev => ({ ...prev, selectedTerritory: territoryId }));
-        }
-      } else if (gameState.selectedTerritory === territoryId) {
-        setGameState(prev => ({ ...prev, selectedTerritory: null }));
-      } else if (canFortify(gameState.selectedTerritory, territoryId)) {
-        const armiesToMove = Math.floor(getTerritoryArmies(gameState.selectedTerritory) / 2);
-        if (armiesToMove > 0) {
-          // Mise à jour immédiate des territoires
-          setTerritoryStates(prev => ({
-            ...prev,
-            [gameState.selectedTerritory]: { 
-              ...prev[gameState.selectedTerritory], 
-              armies: prev[gameState.selectedTerritory].armies - armiesToMove 
+              1: { name: 'You', armies: 8, territories: [], color: 'bg-blue-500' },
+              2: { name: 'Claude', armies: 8, territories: [], color: 'bg-red-500' }
             },
-            [territoryId]: { 
-              ...prev[territoryId], 
-              armies: prev[territoryId].armies + armiesToMove 
-            }
-          }));
-          
-          // Force la mise à jour du ref
-          territoryStatesRef.current = territoryStates;
-        }
-        // Déselectionner après le transfert
-        setTimeout(() => {
-          setGameState(prev => ({ ...prev, selectedTerritory: null }));
-        }, 100);
-      } else {
-        if (getTerritoryOwner(territoryId) === gameState.currentPlayer && 
-            getTerritoryArmies(territoryId) > 1) {
-          setGameState(prev => ({ ...prev, selectedTerritory: territoryId }));
-        } else {
-          setGameState(prev => ({ ...prev, selectedTerritory: null }));
-        }
-      }
-    }
-  };
-
-  const performAttack = (attackerId, defenderId) => {
-    const attackerArmies = getTerritoryArmies(attackerId);
-    const defenderArmies = getTerritoryArmies(defenderId);
-    
-    const attackerDice = Math.min(3, attackerArmies - 1);
-    const defenderDice = Math.min(2, defenderArmies);
-    
-    const attackerRolls = Array.from({length: attackerDice}, () => Math.ceil(Math.random() * 6)).sort((a, b) => b - a);
-    const defenderRolls = Array.from({length: defenderDice}, () => Math.ceil(Math.random() * 6)).sort((a, b) => b - a);
-    
-    let attackerLosses = 0;
-    let defenderLosses = 0;
-    
-    for (let i = 0; i < Math.min(attackerRolls.length, defenderRolls.length); i++) {
-      if (attackerRolls[i] > defenderRolls[i]) {
-        defenderLosses++;
-      } else {
-        attackerLosses++;
-      }
-    }
-    
-    const newDefenderArmies = defenderArmies - defenderLosses;
-    const newAttackerArmies = attackerArmies - attackerLosses;
-    
-    // Mise à jour immédiate avec setState synchrone
-    if (newDefenderArmies <= 0) {
-      setTerritoryStates(prev => ({
-        ...prev,
-        [defenderId]: { 
-          owner: gameState.currentPlayer, 
-          armies: newAttackerArmies - 1 
-        },
-        [attackerId]: { 
-          ...prev[attackerId], 
-          armies: 1 
-        }
-      }));
-    } else {
-      setTerritoryStates(prev => ({
-        ...prev,
-        [defenderId]: { 
-          ...prev[defenderId], 
-          armies: newDefenderArmies 
-        },
-        [attackerId]: { 
-          ...prev[attackerId], 
-          armies: newAttackerArmies 
-        }
-      }));
-    }
-    
-    // Force un re-render immédiat
-    territoryStatesRef.current = territoryStates;
-  };
-
-  const makeAIMove = useCallback(() => {
-    if (gameState.aiThinking) return;
-
-    setGameState(prev => ({ ...prev, aiThinking: true }));
-
-    if (gameState.phase === 'initialDeploy' || gameState.phase === 'deploy') {
-      if (gameState.players[2].armies > 0) {
-        setGameState(prev => ({ 
-          ...prev, 
-          aiAction: { type: 'deploy', message: 'Claude is deploying an army...' } 
-        }));
-        
-        setTimeout(() => {
-          const currentStates = territoryStatesRef.current || territoryStates;
-          const myTerritories = Object.keys(currentStates)
-            .filter(id => currentStates[parseInt(id)]?.owner === 2)
-            .map(Number);
-          
-          const borderTerritories = myTerritories.filter(id => {
-            const territory = territories.find(t => t.id === id);
-            return territory && territory.neighbors.some(neighborId => 
-              currentStates[neighborId]?.owner === 1
-            );
+            selectedTerritory: null,
+            targetTerritory: null,
+            gameStarted: false,
+            winner: null,
+            aiAction: null,
+            glowingTerritory: null,
+            aiThinking: false
           });
-          
-          let targetId;
-          if (borderTerritories.length > 0) {
-            targetId = borderTerritories[Math.floor(Math.random() * borderTerritories.length)];
-          } else if (myTerritories.length > 0) {
-            targetId = myTerritories[Math.floor(Math.random() * myTerritories.length)];
-          }
-          
-          if (targetId) {
-            setGameState(prev => ({ ...prev, glowingTerritory: targetId }));
-            deployArmy(targetId);
+
+          const [zoomLevel, setZoomLevel] = useState(1);
+
+          const territoryStatesRef = useRef({});
+
+          const territories = [
+            { id: 1, name: 'Northern Kingdom', x: 50, y: 10, neighbors: [2, 3, 6] },
+            { id: 2, name: 'Mystic Forest', x: 25, y: 25, neighbors: [1, 3, 4, 6, 7] },
+            { id: 3, name: 'High Mountains', x: 75, y: 25, neighbors: [1, 2, 5, 6, 8] },
+            { id: 4, name: 'Fertile Valley', x: 0, y: 40, neighbors: [2, 7, 9] },
+            { id: 5, name: 'Burning Desert', x: 100, y: 40, neighbors: [3, 8, 10] },
+            { id: 6, name: 'Central Plains', x: 50, y: 40, neighbors: [1, 2, 3, 7, 8, 11] },
+            { id: 7, name: 'Dark Swamps', x: 25, y: 55, neighbors: [2, 4, 6, 9, 11, 12] },
+            { id: 8, name: 'Green Hills', x: 75, y: 55, neighbors: [3, 5, 6, 10, 11, 13] },
+            { id: 9, name: 'Western Port', x: 0, y: 70, neighbors: [4, 7, 12, 14] },
+            { id: 10, name: 'Red Lands', x: 100, y: 70, neighbors: [5, 8, 13, 15] },
+            { id: 11, name: 'Heart of the Realm', x: 50, y: 70, neighbors: [6, 7, 8, 12, 13, 16] },
+            { id: 12, name: 'Frozen Lakes', x: 25, y: 85, neighbors: [7, 9, 11, 14, 16, 18] },
+            { id: 13, name: 'Wild Steppes', x: 75, y: 85, neighbors: [8, 10, 11, 15, 16, 17] },
+            { id: 14, name: 'Riffault Bay', x: 0, y: 100, neighbors: [9, 12, 18] },
+            { id: 15, name: 'Volcanic Islands', x: 100, y: 100, neighbors: [10, 13, 17] },
+            { id: 16, name: 'Central Market', x: 50, y: 100, neighbors: [11, 12, 13, 17, 18] },
+            { id: 17, name: 'Final Citadel', x: 75, y: 115, neighbors: [13, 15, 16, 18] },
+            { id: 18, name: 'Ancient Temple', x: 25, y: 115, neighbors: [12, 14, 16, 17] }
+          ];
+
+          const [territoryStates, setTerritoryStates] = useState({});
+
+          useEffect(() => {
+            territoryStatesRef.current = territoryStates;
+          }, [territoryStates]);
+
+          const initializeGame = () => {
+            const shuffledTerritories = [...territories].sort(() => Math.random() - 0.5);
+            const newTerritoryStates = {};
             
-            setTimeout(() => {
-              setGameState(prev => ({ 
-                ...prev, 
-                glowingTerritory: null,
-                aiAction: null,
-                aiThinking: false
-              }));
-            }, 600);
-          } else {
-            setGameState(prev => ({ 
-              ...prev, 
-              aiAction: null,
+            shuffledTerritories.forEach((territory, index) => {
+              const owner = index < 9 ? 1 : 2;
+              newTerritoryStates[territory.id] = { owner, armies: 1 };
+            });
+
+            const player1Territories = Object.keys(newTerritoryStates).filter(id => newTerritoryStates[id].owner === 1).map(Number);
+            const player2Territories = Object.keys(newTerritoryStates).filter(id => newTerritoryStates[id].owner === 2).map(Number);
+
+            setTerritoryStates(newTerritoryStates);
+            setGameState(prev => ({
+              ...prev,
+              gameStarted: true,
+              currentPlayer: 1,
+              phase: 'initialDeploy',
+              players: {
+                1: { ...prev.players[1], territories: player1Territories, armies: 8 },
+                2: { ...prev.players[2], territories: player2Territories, armies: 8 }
+              },
               aiThinking: false
             }));
-          }
-        }, 1500);
-      } else if (gameState.phase === 'deploy') {
-        setTimeout(() => {
-          setGameState(prev => ({ ...prev, aiThinking: false }));
-          nextPhase();
-        }, 500);
-      }
-    } else if (gameState.phase === 'attack') {
-      handleAIAttackPhase();
-    } else if (gameState.phase === 'fortify') {
-      handleAIFortifyPhase();
-    }
-  }, [gameState.phase, gameState.players, gameState.aiThinking, territoryStates, deployArmy, nextPhase]);
+          };
 
-  const handleAIAttackPhase = useCallback(() => {
-    setGameState(prev => ({ 
-      ...prev, 
-      aiAction: { type: 'attack', message: 'Claude is analyzing the battlefield...' } 
-    }));
-    
-    const performAIAttackSequence = () => {
-      setTimeout(() => {
-        const currentStates = territoryStatesRef.current || territoryStates;
-        const myTerritories = Object.keys(currentStates)
-          .filter(id => currentStates[parseInt(id)]?.owner === 2)
-          .map(Number);
-        
-        const attackOptions = [];
-        
-        myTerritories.forEach(attackerId => {
-          const attackerArmies = currentStates[attackerId]?.armies || 0;
-          if (attackerArmies <= 1) return;
-          
-          const territory = territories.find(t => t.id === attackerId);
-          if (!territory) return;
-          
-          let vulnerabilityScore = 0;
-          let enemyNeighborCount = 0;
-          let totalEnemyThreat = 0;
-          
-          territory.neighbors.forEach(neighborId => {
-            if (currentStates[neighborId]?.owner === 1) {
-              enemyNeighborCount++;
-              const enemyArmies = currentStates[neighborId]?.armies || 0;
-              totalEnemyThreat += enemyArmies;
+          const getTerritoryOwner = (territoryId) => {
+            const states = territoryStatesRef.current || territoryStates;
+            return states[territoryId]?.owner || null;
+          };
+
+          const getTerritoryArmies = (territoryId) => {
+            const states = territoryStatesRef.current || territoryStates;
+            return states[territoryId]?.armies || 0;
+          };
+
+          const isNeighbor = (territory1, territory2) => {
+            const t1 = territories.find(t => t.id === territory1);
+            return t1?.neighbors.includes(territory2);
+          };
+
+          const canAttack = (fromId, toId) => {
+            return getTerritoryOwner(fromId) === gameState.currentPlayer &&
+                   getTerritoryOwner(toId) !== gameState.currentPlayer &&
+                   getTerritoryArmies(fromId) > 1 &&
+                   isNeighbor(fromId, toId);
+          };
+
+          const canFortify = (fromId, toId) => {
+            return getTerritoryOwner(fromId) === gameState.currentPlayer &&
+                   getTerritoryOwner(toId) === gameState.currentPlayer &&
+                   getTerritoryArmies(fromId) > 1 &&
+                   isNeighbor(fromId, toId) &&
+                   fromId !== toId;
+          };
+
+          const checkWinCondition = useCallback(() => {
+            const currentStates = territoryStatesRef.current || territoryStates;
+            const player1Territories = Object.keys(currentStates).filter(id => currentStates[parseInt(id)]?.owner === 1);
+            const player2Territories = Object.keys(currentStates).filter(id => currentStates[parseInt(id)]?.owner === 2);
+            
+            if (player1Territories.length === 0) {
+              setGameState(prev => ({ ...prev, winner: 2, aiAction: null, aiThinking: false }));
+              return true;
+            } else if (player2Territories.length === 0) {
+              setGameState(prev => ({ ...prev, winner: 1, aiAction: null, aiThinking: false }));
+              return true;
             }
-          });
-          
-          vulnerabilityScore = (enemyNeighborCount * 0.3) + (totalEnemyThreat * 0.1);
-          
-          territory.neighbors.forEach(targetId => {
-            if (currentStates[targetId]?.owner === 1) {
-              const defenderArmies = currentStates[targetId]?.armies || 0;
-              
-              const attackerDice = Math.min(3, attackerArmies - 1);
-              const defenderDice = Math.min(2, defenderArmies);
-              
-              let successProbability = 0;
-              if (attackerDice >= defenderDice + 1) {
-                successProbability = 0.8;
-              } else if (attackerDice === defenderDice) {
-                successProbability = 0.6;
-              } else {
-                successProbability = 0.3;
+            return false;
+          }, [territoryStates]);
+
+          const nextPhase = useCallback(() => {
+            if (checkWinCondition()) return;
+
+            setGameState(prev => {
+              if (prev.phase === 'initialDeploy') {
+                const nextPlayer = prev.currentPlayer === 1 ? 2 : 1;
+                
+                if (prev.players[prev.currentPlayer].armies === 0) {
+                  if (prev.players[nextPlayer].armies === 0) {
+                    return {
+                      ...prev,
+                      currentPlayer: 1,
+                      phase: 'attack',
+                      selectedTerritory: null,
+                      aiThinking: false
+                    };
+                  } else {
+                    return { 
+                      ...prev, 
+                      currentPlayer: nextPlayer, 
+                      selectedTerritory: null,
+                      aiThinking: false
+                    };
+                  }
+                } else {
+                  return { 
+                    ...prev, 
+                    currentPlayer: nextPlayer, 
+                    selectedTerritory: null,
+                    aiThinking: false
+                  };
+                }
+              } else if (prev.phase === 'deploy') {
+                return { ...prev, phase: 'attack', selectedTerritory: null };
+              } else if (prev.phase === 'attack') {
+                return { ...prev, phase: 'fortify', selectedTerritory: null };
+              } else if (prev.phase === 'fortify') {
+                const nextPlayer = prev.currentPlayer === 1 ? 2 : 1;
+                const currentStates = territoryStatesRef.current || territoryStates;
+                const playerTerritories = Object.keys(currentStates).filter(id => currentStates[parseInt(id)]?.owner === nextPlayer);
+                
+                const newArmies = Math.floor(playerTerritories.length / 3);
+                
+                return {
+                  ...prev,
+                  currentPlayer: nextPlayer,
+                  phase: 'deploy',
+                  turn: nextPlayer === 1 ? prev.turn + 1 : prev.turn,
+                  selectedTerritory: null,
+                  players: {
+                    ...prev.players,
+                    [nextPlayer]: {
+                      ...prev.players[nextPlayer],
+                      armies: newArmies
+                    }
+                  },
+                  aiThinking: false
+                };
               }
+              return prev;
+            });
+          }, [checkWinCondition, territoryStates]);
+
+          const deployArmy = useCallback((territoryId) => {
+            if (getTerritoryOwner(territoryId) === gameState.currentPlayer && 
+                gameState.players[gameState.currentPlayer].armies > 0) {
               
-              const weaknessBonus = defenderArmies <= 2 ? 0.3 : 0;
-              const strengthBonus = attackerArmies >= 4 ? 0.2 : 0;
-              const riskPenalty = (attackerArmies <= 3 && vulnerabilityScore > 0.5) ? 0.4 : 0;
-              
-              const score = successProbability + weaknessBonus + strengthBonus - riskPenalty - (vulnerabilityScore * 0.2);
-              
-              if (score > 0.4) {
-                attackOptions.push({ 
-                  attackerId, 
-                  targetId, 
-                  score,
-                  attackerArmies,
-                  vulnerabilityScore 
+              setTerritoryStates(prev => ({
+                ...prev,
+                [territoryId]: { 
+                  ...prev[territoryId], 
+                  armies: prev[territoryId].armies + 1 
+                }
+              }));
+
+              const updateGameState = () => {
+                setGameState(prev => {
+                  const newArmies = prev.players[prev.currentPlayer].armies - 1;
+                  const updatedState = {
+                    ...prev,
+                    players: {
+                      ...prev.players,
+                      [prev.currentPlayer]: {
+                        ...prev.players[prev.currentPlayer],
+                        armies: newArmies
+                      }
+                    }
+                  };
+
+                  if (prev.phase === 'initialDeploy' && newArmies === 0) {
+                    const nextPlayer = prev.currentPlayer === 1 ? 2 : 1;
+                    if (prev.players[nextPlayer].armies === 0) {
+                      return {
+                        ...updatedState,
+                        currentPlayer: 1,
+                        phase: 'attack',
+                        aiThinking: false
+                      };
+                    } else {
+                      return { 
+                        ...updatedState, 
+                        currentPlayer: nextPlayer,
+                        aiThinking: false
+                      };
+                    }
+                  } else if (prev.phase === 'initialDeploy') {
+                    const nextPlayer = prev.currentPlayer === 1 ? 2 : 1;
+                    return { 
+                      ...updatedState, 
+                      currentPlayer: nextPlayer,
+                      aiThinking: false
+                    };
+                  }
+
+                  return updatedState;
                 });
+              };
+
+              if (gameState.currentPlayer === 1) {
+                setTimeout(updateGameState, 200);
+              } else {
+                updateGameState();
+              }
+              
+              return true;
+            }
+            return false;
+          }, [gameState.currentPlayer, gameState.players, gameState.phase]);
+
+          const handleTerritoryClick = (territoryId) => {
+            if (!gameState.gameStarted || gameState.winner || 
+                gameState.currentPlayer === 2 || gameState.aiAction || gameState.aiThinking) return;
+
+            if (gameState.phase === 'initialDeploy' || gameState.phase === 'deploy') {
+              if (getTerritoryOwner(territoryId) === gameState.currentPlayer && 
+                  gameState.players[gameState.currentPlayer].armies > 0) {
+                deployArmy(territoryId);
+              }
+            } else if (gameState.phase === 'attack') {
+              if (!gameState.selectedTerritory) {
+                if (getTerritoryOwner(territoryId) === gameState.currentPlayer && 
+                    getTerritoryArmies(territoryId) > 1) {
+                  setGameState(prev => ({ ...prev, selectedTerritory: territoryId }));
+                }
+              } else if (gameState.selectedTerritory === territoryId) {
+                setGameState(prev => ({ ...prev, selectedTerritory: null }));
+              } else if (canAttack(gameState.selectedTerritory, territoryId)) {
+                performAttack(gameState.selectedTerritory, territoryId);
+                setTimeout(() => {
+                  setGameState(prev => ({ ...prev, selectedTerritory: null }));
+                }, 100);
+              } else {
+                if (getTerritoryOwner(territoryId) === gameState.currentPlayer && 
+                    getTerritoryArmies(territoryId) > 1) {
+                  setGameState(prev => ({ ...prev, selectedTerritory: territoryId }));
+                } else {
+                  setGameState(prev => ({ ...prev, selectedTerritory: null }));
+                }
+              }
+            } else if (gameState.phase === 'fortify') {
+              if (!gameState.selectedTerritory) {
+                if (getTerritoryOwner(territoryId) === gameState.currentPlayer && 
+                    getTerritoryArmies(territoryId) > 1) {
+                  setGameState(prev => ({ ...prev, selectedTerritory: territoryId }));
+                }
+              } else if (gameState.selectedTerritory === territoryId) {
+                setGameState(prev => ({ ...prev, selectedTerritory: null }));
+              } else if (canFortify(gameState.selectedTerritory, territoryId)) {
+                const armiesToMove = Math.floor(getTerritoryArmies(gameState.selectedTerritory) / 2);
+                if (armiesToMove > 0) {
+                  setTerritoryStates(prev => ({
+                    ...prev,
+                    [gameState.selectedTerritory]: { 
+                      ...prev[gameState.selectedTerritory], 
+                      armies: prev[gameState.selectedTerritory].armies - armiesToMove 
+                    },
+                    [territoryId]: { 
+                      ...prev[territoryId], 
+                      armies: prev[territoryId].armies + armiesToMove 
+                    }
+                  }));
+                  
+                  territoryStatesRef.current = territoryStates;
+                }
+                setTimeout(() => {
+                  setGameState(prev => ({ ...prev, selectedTerritory: null }));
+                }, 100);
+              } else {
+                if (getTerritoryOwner(territoryId) === gameState.currentPlayer && 
+                    getTerritoryArmies(territoryId) > 1) {
+                  setGameState(prev => ({ ...prev, selectedTerritory: territoryId }));
+                } else {
+                  setGameState(prev => ({ ...prev, selectedTerritory: null }));
+                }
               }
             }
-          });
-        });
-        
-        if (attackOptions.length > 0) {
-          attackOptions.sort((a, b) => b.score - a.score);
-          
-          const scoreThreshold = attackOptions[0].score * 0.6;
-          const goodAttacks = attackOptions.filter(a => a.score >= scoreThreshold);
-          
-          const attackIndex = Math.floor(Math.random() * Math.min(3, goodAttacks.length));
-          const bestAttack = goodAttacks[attackIndex] || goodAttacks[0];
-          
-          setGameState(prev => ({ 
-            ...prev, 
-            aiAction: { 
-              type: 'attacking', 
-              message: `Claude attacks territory ${bestAttack.targetId} from territory ${bestAttack.attackerId}!`,
-              from: bestAttack.attackerId,
-              to: bestAttack.targetId
-            } 
-          }));
-          
-          setTimeout(() => {
-            const beforeOwner = getTerritoryOwner(bestAttack.targetId);
-            performAttack(bestAttack.attackerId, bestAttack.targetId);
+          };
+
+          const performAttack = (attackerId, defenderId) => {
+            const attackerArmies = getTerritoryArmies(attackerId);
+            const defenderArmies = getTerritoryArmies(defenderId);
+            
+            const attackerDice = Math.min(3, attackerArmies - 1);
+            const defenderDice = Math.min(2, defenderArmies);
+            
+            const attackerRolls = Array.from({length: attackerDice}, () => Math.ceil(Math.random() * 6)).sort((a, b) => b - a);
+            const defenderRolls = Array.from({length: defenderDice}, () => Math.ceil(Math.random() * 6)).sort((a, b) => b - a);
+            
+            let attackerLosses = 0;
+            let defenderLosses = 0;
+            
+            for (let i = 0; i < Math.min(attackerRolls.length, defenderRolls.length); i++) {
+              if (attackerRolls[i] > defenderRolls[i]) {
+                defenderLosses++;
+              } else {
+                attackerLosses++;
+              }
+            }
+            
+            const newDefenderArmies = defenderArmies - defenderLosses;
+            const newAttackerArmies = attackerArmies - attackerLosses;
+            
+            if (newDefenderArmies <= 0) {
+              setTerritoryStates(prev => ({
+                ...prev,
+                [defenderId]: { 
+                  owner: gameState.currentPlayer, 
+                  armies: newAttackerArmies - 1 
+                },
+                [attackerId]: { 
+                  ...prev[attackerId], 
+                  armies: 1 
+                }
+              }));
+            } else {
+              setTerritoryStates(prev => ({
+                ...prev,
+                [defenderId]: { 
+                  ...prev[defenderId], 
+                  armies: newDefenderArmies 
+                },
+                [attackerId]: { 
+                  ...prev[attackerId], 
+                  armies: newAttackerArmies 
+                }
+              }));
+            }
+            
+            territoryStatesRef.current = territoryStates;
+          };
+
+          const makeAIMove = useCallback(() => {
+            if (gameState.aiThinking) return;
+
+            setGameState(prev => ({ ...prev, aiThinking: true }));
+
+            if (gameState.phase === 'initialDeploy' || gameState.phase === 'deploy') {
+              if (gameState.players[2].armies > 0) {
+                setGameState(prev => ({ 
+                  ...prev, 
+                  aiAction: { type: 'deploy', message: 'Claude is deploying an army...' } 
+                }));
+                
+                setTimeout(() => {
+                  const currentStates = territoryStatesRef.current || territoryStates;
+                  const myTerritories = Object.keys(currentStates)
+                    .filter(id => currentStates[parseInt(id)]?.owner === 2)
+                    .map(Number);
+                  
+                  const borderTerritories = myTerritories.filter(id => {
+                    const territory = territories.find(t => t.id === id);
+                    return territory && territory.neighbors.some(neighborId => 
+                      currentStates[neighborId]?.owner === 1
+                    );
+                  });
+                  
+                  let targetId;
+                  if (borderTerritories.length > 0) {
+                    targetId = borderTerritories[Math.floor(Math.random() * borderTerritories.length)];
+                  } else if (myTerritories.length > 0) {
+                    targetId = myTerritories[Math.floor(Math.random() * myTerritories.length)];
+                  }
+                  
+                  if (targetId) {
+                    setGameState(prev => ({ ...prev, glowingTerritory: targetId }));
+                    deployArmy(targetId);
+                    
+                    setTimeout(() => {
+                      setGameState(prev => ({ 
+                        ...prev, 
+                        glowingTerritory: null,
+                        aiAction: null,
+                        aiThinking: false
+                      }));
+                    }, 600);
+                  } else {
+                    setGameState(prev => ({ 
+                      ...prev, 
+                      aiAction: null,
+                      aiThinking: false
+                    }));
+                  }
+                }, 1500);
+              } else if (gameState.phase === 'deploy') {
+                setTimeout(() => {
+                  setGameState(prev => ({ ...prev, aiThinking: false }));
+                  nextPhase();
+                }, 500);
+              }
+            } else if (gameState.phase === 'attack') {
+              handleAIAttackPhase();
+            } else if (gameState.phase === 'fortify') {
+              handleAIFortifyPhase();
+            }
+          }, [gameState.phase, gameState.players, gameState.aiThinking, territoryStates, deployArmy, nextPhase]);
+
+          const handleAIAttackPhase = useCallback(() => {
+            setGameState(prev => ({ 
+              ...prev, 
+              aiAction: { type: 'attack', message: 'Claude is analyzing the battlefield...' } 
+            }));
+            
+            const performAIAttackSequence = () => {
+              setTimeout(() => {
+                const currentStates = territoryStatesRef.current || territoryStates;
+                const myTerritories = Object.keys(currentStates)
+                  .filter(id => currentStates[parseInt(id)]?.owner === 2)
+                  .map(Number);
+                
+                const attackOptions = [];
+                
+                myTerritories.forEach(attackerId => {
+                  const attackerArmies = currentStates[attackerId]?.armies || 0;
+                  if (attackerArmies <= 1) return;
+                  
+                  const territory = territories.find(t => t.id === attackerId);
+                  if (!territory) return;
+                  
+                  let vulnerabilityScore = 0;
+                  let enemyNeighborCount = 0;
+                  let totalEnemyThreat = 0;
+                  
+                  territory.neighbors.forEach(neighborId => {
+                    if (currentStates[neighborId]?.owner === 1) {
+                      enemyNeighborCount++;
+                      const enemyArmies = currentStates[neighborId]?.armies || 0;
+                      totalEnemyThreat += enemyArmies;
+                    }
+                  });
+                  
+                  vulnerabilityScore = (enemyNeighborCount * 0.3) + (totalEnemyThreat * 0.1);
+                  
+                  territory.neighbors.forEach(targetId => {
+                    if (currentStates[targetId]?.owner === 1) {
+                      const defenderArmies = currentStates[targetId]?.armies || 0;
+                      
+                      const attackerDice = Math.min(3, attackerArmies - 1);
+                      const defenderDice = Math.min(2, defenderArmies);
+                      
+                      let successProbability = 0;
+                      if (attackerDice >= defenderDice + 1) {
+                        successProbability = 0.8;
+                      } else if (attackerDice === defenderDice) {
+                        successProbability = 0.6;
+                      } else {
+                        successProbability = 0.3;
+                      }
+                      
+                      const weaknessBonus = defenderArmies <= 2 ? 0.3 : 0;
+                      const strengthBonus = attackerArmies >= 4 ? 0.2 : 0;
+                      const riskPenalty = (attackerArmies <= 3 && vulnerabilityScore > 0.5) ? 0.4 : 0;
+                      
+                      const score = successProbability + weaknessBonus + strengthBonus - riskPenalty - (vulnerabilityScore * 0.2);
+                      
+                      if (score > 0.4) {
+                        attackOptions.push({ 
+                          attackerId, 
+                          targetId, 
+                          score,
+                          attackerArmies,
+                          vulnerabilityScore 
+                        });
+                      }
+                    }
+                  });
+                });
+                
+                if (attackOptions.length > 0) {
+                  attackOptions.sort((a, b) => b.score - a.score);
+                  
+                  const scoreThreshold = attackOptions[0].score * 0.6;
+                  const goodAttacks = attackOptions.filter(a => a.score >= scoreThreshold);
+                  
+                  const attackIndex = Math.floor(Math.random() * Math.min(3, goodAttacks.length));
+                  const bestAttack = goodAttacks[attackIndex] || goodAttacks[0];
+                  
+                  setGameState(prev => ({ 
+                    ...prev, 
+                    aiAction: { 
+                      type: 'attacking', 
+                      message: `Claude attacks territory ${bestAttack.targetId} from territory ${bestAttack.attackerId}!`,
+                      from: bestAttack.attackerId,
+                      to: bestAttack.targetId
+                    } 
+                  }));
+                  
+                  setTimeout(() => {
+                    const beforeOwner = getTerritoryOwner(bestAttack.targetId);
+                    performAttack(bestAttack.attackerId, bestAttack.targetId);
+                    
+                    setTimeout(() => {
+                      const afterOwner = getTerritoryOwner(bestAttack.targetId);
+                      const conquered = beforeOwner !== afterOwner;
+                      
+                      if (checkWinCondition()) {
+                        setGameState(prev => ({ 
+                          ...prev, 
+                          aiAction: null,
+                          aiThinking: false
+                        }));
+                        return;
+                      }
+                      
+                      if (conquered) {
+                        setGameState(prev => ({ 
+                          ...prev, 
+                          aiAction: { type: 'attack', message: 'Conquest successful! Claude is evaluating the situation...' }
+                        }));
+                        
+                        if (Math.random() < 0.7) {
+                          performAIAttackSequence();
+                        } else {
+                          setTimeout(() => {
+                            setGameState(prev => ({ 
+                              ...prev, 
+                              aiAction: { type: 'attack', message: 'Claude is consolidating positions...' }
+                            }));
+                            setTimeout(() => {
+                              setGameState(prev => ({ 
+                                ...prev, 
+                                aiAction: null,
+                                aiThinking: false
+                              }));
+                              nextPhase();
+                            }, 1000);
+                          }, 1500);
+                        }
+                      } else {
+                        if (Math.random() < 0.4 && attackOptions.length > 1) {
+                          setGameState(prev => ({ 
+                            ...prev, 
+                            aiAction: { type: 'attack', message: 'Attack repelled... Claude is reconsidering options...' }
+                          }));
+                          performAIAttackSequence();
+                        } else {
+                          setTimeout(() => {
+                            setGameState(prev => ({ 
+                              ...prev, 
+                              aiAction: { type: 'attack', message: 'Claude ends attacks...' }
+                            }));
+                            setTimeout(() => {
+                              setGameState(prev => ({ 
+                                ...prev, 
+                                aiAction: null,
+                                aiThinking: false
+                              }));
+                              nextPhase();
+                            }, 1000);
+                          }, 500);
+                        }
+                      }
+                    }, 1000);
+                  }, 2000);
+                } else {
+                  setGameState(prev => ({ 
+                    ...prev, 
+                    aiAction: { type: 'attack', message: 'Claude ends attacks...' }
+                  }));
+                  setTimeout(() => {
+                    setGameState(prev => ({ 
+                      ...prev, 
+                      aiAction: null,
+                      aiThinking: false
+                    }));
+                    nextPhase();
+                  }, 1000);
+                }
+              }, 1500);
+            };
+            
+            performAIAttackSequence();
+          }, [territoryStates, checkWinCondition, nextPhase]);
+
+          const handleAIFortifyPhase = useCallback(() => {
+            setGameState(prev => ({ 
+              ...prev, 
+              aiAction: { type: 'fortify', message: 'Claude is fortifying positions...' } 
+            }));
             
             setTimeout(() => {
-              const afterOwner = getTerritoryOwner(bestAttack.targetId);
-              const conquered = beforeOwner !== afterOwner;
+              const currentStates = territoryStatesRef.current || territoryStates;
+              const myTerritories = Object.keys(currentStates)
+                .filter(id => currentStates[parseInt(id)]?.owner === 2)
+                .map(Number);
               
-              if (checkWinCondition()) {
+              const fortifyOptions = [];
+              
+              myTerritories.forEach(sourceId => {
+                const sourceArmies = currentStates[sourceId]?.armies || 0;
+                if (sourceArmies <= 1) return;
+                
+                const territory = territories.find(t => t.id === sourceId);
+                if (!territory) return;
+                
+                territory.neighbors.forEach(targetId => {
+                  if (currentStates[targetId]?.owner === 2) {
+                    const targetTerritory = territories.find(t => t.id === targetId);
+                    if (!targetTerritory) return;
+                    
+                    const isTargetBorder = targetTerritory.neighbors.some(n => 
+                      currentStates[n]?.owner === 1
+                    );
+                    
+                    if (isTargetBorder) {
+                      fortifyOptions.push({ sourceId, targetId, armies: sourceArmies });
+                    }
+                  }
+                });
+              });
+              
+              if (fortifyOptions.length > 0) {
+                const fortify = fortifyOptions[Math.floor(Math.random() * fortifyOptions.length)];
+                const armiesToMove = Math.floor(fortify.armies / 2);
+                
+                if (armiesToMove > 0) {
+                  setTerritoryStates(prev => ({
+                    ...prev,
+                    [fortify.sourceId]: { 
+                      ...prev[fortify.sourceId], 
+                      armies: prev[fortify.sourceId].armies - armiesToMove 
+                    },
+                    [fortify.targetId]: { 
+                      ...prev[fortify.targetId], 
+                      armies: prev[fortify.targetId].armies + armiesToMove 
+                    }
+                  }));
+                }
+              }
+              
+              setTimeout(() => {
                 setGameState(prev => ({ 
                   ...prev, 
                   aiAction: null,
                   aiThinking: false
                 }));
-                return;
-              }
-              
-              if (conquered) {
-                setGameState(prev => ({ 
-                  ...prev, 
-                  aiAction: { type: 'attack', message: 'Conquest successful! Claude is evaluating the situation...' }
-                }));
-                
-                if (Math.random() < 0.7) {
-                  performAIAttackSequence();
-                } else {
-                  setTimeout(() => {
-                    setGameState(prev => ({ 
-                      ...prev, 
-                      aiAction: { type: 'attack', message: 'Claude is consolidating positions...' }
-                    }));
-                    setTimeout(() => {
-                      setGameState(prev => ({ 
-                        ...prev, 
-                        aiAction: null,
-                        aiThinking: false
-                      }));
-                      nextPhase();
-                    }, 1000);
-                  }, 1500);
-                }
-              } else {
-                if (Math.random() < 0.4 && attackOptions.length > 1) {
-                  setGameState(prev => ({ 
-                    ...prev, 
-                    aiAction: { type: 'attack', message: 'Attack repelled... Claude is reconsidering options...' }
-                  }));
-                  performAIAttackSequence();
-                } else {
-                  setTimeout(() => {
-                    setGameState(prev => ({ 
-                      ...prev, 
-                      aiAction: { type: 'attack', message: 'Claude ends attacks...' }
-                    }));
-                    setTimeout(() => {
-                      setGameState(prev => ({ 
-                        ...prev, 
-                        aiAction: null,
-                        aiThinking: false
-                      }));
-                      nextPhase();
-                    }, 1000);
-                  }, 500);
-                }
-              }
-            }, 1000);
-          }, 2000);
-        } else {
-          setGameState(prev => ({ 
-            ...prev, 
-            aiAction: { type: 'attack', message: 'Claude ends attacks...' }
-          }));
-          setTimeout(() => {
-            setGameState(prev => ({ 
-              ...prev, 
-              aiAction: null,
-              aiThinking: false
-            }));
-            nextPhase();
-          }, 1000);
-        }
-      }, 1500);
-    };
-    
-    performAIAttackSequence();
-  }, [territoryStates, checkWinCondition, nextPhase]);
+                nextPhase();
+              }, 1000);
+            }, 2000);
+          }, [territoryStates, nextPhase]);
 
-  const handleAIFortifyPhase = useCallback(() => {
-    setGameState(prev => ({ 
-      ...prev, 
-      aiAction: { type: 'fortify', message: 'Claude is fortifying positions...' } 
-    }));
-    
-    setTimeout(() => {
-      const currentStates = territoryStatesRef.current || territoryStates;
-      const myTerritories = Object.keys(currentStates)
-        .filter(id => currentStates[parseInt(id)]?.owner === 2)
-        .map(Number);
-      
-      const fortifyOptions = [];
-      
-      myTerritories.forEach(sourceId => {
-        const sourceArmies = currentStates[sourceId]?.armies || 0;
-        if (sourceArmies <= 1) return;
-        
-        const territory = territories.find(t => t.id === sourceId);
-        if (!territory) return;
-        
-        territory.neighbors.forEach(targetId => {
-          if (currentStates[targetId]?.owner === 2) {
-            const targetTerritory = territories.find(t => t.id === targetId);
-            if (!targetTerritory) return;
-            
-            const isTargetBorder = targetTerritory.neighbors.some(n => 
-              currentStates[n]?.owner === 1
-            );
-            
-            if (isTargetBorder) {
-              fortifyOptions.push({ sourceId, targetId, armies: sourceArmies });
+          useEffect(() => {
+            if (gameState.gameStarted && !gameState.winner) {
+              setTimeout(() => {
+                checkWinCondition();
+              }, 100);
             }
-          }
-        });
-      });
-      
-      if (fortifyOptions.length > 0) {
-        const fortify = fortifyOptions[Math.floor(Math.random() * fortifyOptions.length)];
-        const armiesToMove = Math.floor(fortify.armies / 2);
-        
-        if (armiesToMove > 0) {
-          setTerritoryStates(prev => ({
-            ...prev,
-            [fortify.sourceId]: { 
-              ...prev[fortify.sourceId], 
-              armies: prev[fortify.sourceId].armies - armiesToMove 
-            },
-            [fortify.targetId]: { 
-              ...prev[fortify.targetId], 
-              armies: prev[fortify.targetId].armies + armiesToMove 
+          }, [territoryStates, gameState.gameStarted, gameState.winner, checkWinCondition]);
+
+          useEffect(() => {
+            if (gameState.currentPlayer === 2 && gameState.gameStarted && 
+                !gameState.winner && !gameState.aiAction && !gameState.aiThinking) {
+              const timer = setTimeout(() => {
+                makeAIMove();
+              }, 1000);
+              return () => clearTimeout(timer);
             }
-          }));
-        }
-      }
-      
-      setTimeout(() => {
-        setGameState(prev => ({ 
-          ...prev, 
-          aiAction: null,
-          aiThinking: false
-        }));
-        nextPhase();
-      }, 1000);
-    }, 2000);
-  }, [territoryStates, nextPhase]);
+          }, [gameState.currentPlayer, gameState.phase, gameState.gameStarted, 
+              gameState.winner, gameState.aiAction, gameState.aiThinking, makeAIMove]);
 
-  useEffect(() => {
-    if (gameState.gameStarted && !gameState.winner) {
-      setTimeout(() => {
-        checkWinCondition();
-      }, 100);
-    }
-  }, [territoryStates, gameState.gameStarted, gameState.winner, checkWinCondition]);
-
-  useEffect(() => {
-    if (gameState.currentPlayer === 2 && gameState.gameStarted && 
-        !gameState.winner && !gameState.aiAction && !gameState.aiThinking) {
-      const timer = setTimeout(() => {
-        makeAIMove();
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [gameState.currentPlayer, gameState.phase, gameState.gameStarted, 
-      gameState.winner, gameState.aiAction, gameState.aiThinking, makeAIMove]);
-
-  if (!gameState.gameStarted) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center">
-        <div className="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full mx-4">
-          <div className="text-center mb-6">
-            <Crown className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Conquest</h1>
-            <p className="text-gray-600">Territory Strategy Game</p>
-          </div>
-          
-          <div className="space-y-4 mb-6">
-            <h2 className="text-lg font-semibold text-gray-700">Game Rules:</h2>
-            <ul className="text-sm text-gray-600 space-y-2">
-              <li>• Conquer all territories to win</li>
-              <li>• Turn in 3 phases: Deploy, Attack, Fortify</li>
-              <li>• Battles are resolved with dice (more armies = advantage)</li>
-              <li>• Reinforce your borders and attack strategically</li>
-              <li>• Each player starts with 9 territories and 8 armies to deploy</li>
-              <li>• Reinforcements: number of territories ÷ 3 (rounded down)</li>
-            </ul>
-          </div>
-          
-          <button
-            onClick={initializeGame}
-            className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
-          >
-            Start Game
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 p-4">
-      <div className="max-w-7xl mx-auto">
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center space-x-4">
-              <Crown className={`${zoomLevel <= 0.7 ? 'w-6 h-6' : 'w-8 h-8'} text-amber-400`} />
-              <h1 className={`${zoomLevel <= 0.7 ? 'text-xl' : 'text-2xl'} font-bold text-white`}>Conquest</h1>
-              <span className={`text-amber-300 ${zoomLevel <= 0.7 ? 'text-sm' : ''}`}>Turn {gameState.turn}</span>
-            </div>
-            
-            <div className="text-center flex-1">
-              <div className={`${zoomLevel <= 0.7 ? 'text-xl' : 'text-2xl'} font-bold text-amber-300 mb-1`}>
-                {gameState.phase === 'initialDeploy' ? 'INITIAL DEPLOYMENT' : 
-                 gameState.phase === 'deploy' ? 'DEPLOYMENT' : 
-                 gameState.phase === 'attack' ? 'ATTACK' : 'FORTIFY'}
-              </div>
-            </div>
-            
-            {gameState.winner ? (
-              <div className="text-center">
-                <div className={`${zoomLevel <= 0.7 ? 'text-xl' : 'text-2xl'} font-bold text-amber-400 mb-2`}>
-                  🎉 {gameState.players[gameState.winner].name} won! 🎉
-                </div>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg"
-                >
-                  New Game
-                </button>
-              </div>
-            ) : (
-              <div className="text-right">
-                <div className={`text-white ${zoomLevel <= 0.7 ? 'text-base' : 'text-lg'} font-semibold`}>
-                  Current player: <span className={`px-3 py-1 rounded-full text-white ${gameState.players[gameState.currentPlayer].color}`}>
-                    {gameState.players[gameState.currentPlayer].name}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className={`grid grid-cols-2 gap-4 ${zoomLevel <= 0.7 ? 'mb-2' : 'mb-4'}`}>
-            {[1, 2].map(playerId => {
-              const playerTerritories = Object.keys(territoryStates || {})
-                .filter(id => getTerritoryOwner(parseInt(id)) === playerId);
-              
-              // Calculer le total d'armées sur le plateau
-              const totalArmiesOnBoard = playerTerritories.reduce((sum, id) => {
-                return sum + getTerritoryArmies(parseInt(id));
-              }, 0);
-              
-              return (
-                <div key={playerId} className={`${zoomLevel <= 0.7 ? 'p-2' : 'p-4'} rounded-lg ${gameState.currentPlayer === playerId ? 'bg-white/20' : 'bg-white/10'}`}>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <div className={`${zoomLevel <= 0.7 ? 'w-3 h-3' : 'w-4 h-4'} rounded-full ${gameState.players[playerId].color}`}></div>
-                    <span className={`text-white font-semibold ${zoomLevel <= 0.7 ? 'text-sm' : ''}`}>{gameState.players[playerId].name}</span>
+          if (!gameState.gameStarted) {
+            return (
+              <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center">
+                <div className="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full mx-4">
+                  <div className="text-center mb-6">
+                    <Crown className="w-16 h-16 text-amber-500 mx-auto mb-4" />
+                    <h1 className="text-3xl font-bold text-gray-800 mb-2">Conquest</h1>
+                    <p className="text-gray-600">Territory Strategy Game</p>
                   </div>
-                  <div className={`${zoomLevel <= 0.7 ? 'text-xs' : 'text-sm'} text-gray-300 space-y-1`}>
-                    <div className="flex items-center space-x-2">
-                      <Users className={`${zoomLevel <= 0.7 ? 'w-3 h-3' : 'w-4 h-4'}`} />
-                      <span>Armies to deploy: {gameState.players[playerId].armies}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Shield className={`${zoomLevel <= 0.7 ? 'w-3 h-3' : 'w-4 h-4'}`} />
-                      <span>Armies on board: {totalArmiesOnBoard}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <MapPin className={`${zoomLevel <= 0.7 ? 'w-3 h-3' : 'w-4 h-4'}`} />
-                      <span>Territories: {playerTerritories.length}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {gameState.currentPlayer === 1 && !gameState.winner && !gameState.aiAction && (
-            <div className="flex justify-center space-x-4">
-              {gameState.phase === 'deploy' && gameState.players[1].armies === 0 && (
-                <button
-                  onClick={nextPhase}
-                  className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg flex items-center space-x-2"
-                >
-                  <Sword className="w-4 h-4" />
-                  <span>Attack Phase</span>
-                </button>
-              )}
-              {gameState.phase === 'attack' && (
-                <button
-                  onClick={nextPhase}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg flex items-center space-x-2"
-                >
-                  <Shield className="w-4 h-4" />
-                  <span>Go to Fortify Phase</span>
-                </button>
-              )}
-              {gameState.phase === 'fortify' && (
-                <button
-                  onClick={nextPhase}
-                  className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-2 rounded-lg"
-                >
-                  End Turn
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
-          <svg 
-            viewBox="0 0 100 125" 
-            className="w-full bg-gradient-to-br from-green-100 to-blue-100 rounded-lg"
-            style={{ 
-              height: zoomLevel <= 0.7 ? '16rem' : zoomLevel >= 1.3 ? '32rem' : '24rem',
-              transition: 'height 0.3s ease'
-            }}
-          >
-            <style>
-              {`
-                @keyframes glow {
-                  0%, 100% { r: 4; opacity: 1; }
-                  50% { r: 5; opacity: 0.8; }
-                }
-                .glowing {
-                  animation: glow 0.6s ease-in-out infinite;
-                }
-              `}
-            </style>
-            {territories.map(territory => {
-              const owner = getTerritoryOwner(territory.id);
-              const armies = getTerritoryArmies(territory.id);
-              const isSelected = gameState.selectedTerritory === territory.id;
-              const canBeTargeted = gameState.selectedTerritory && 
-                                   (gameState.phase === 'attack' ? canAttack(gameState.selectedTerritory, territory.id) :
-                                    gameState.phase === 'fortify' ? canFortify(gameState.selectedTerritory, territory.id) : false);
-              const isAttacking = gameState.aiAction && 
-                                 gameState.aiAction.type === 'attacking' && 
-                                 (gameState.aiAction.from === territory.id || gameState.aiAction.to === territory.id);
-              const isGlowing = gameState.glowingTerritory === territory.id;
-              
-              return (
-                <g key={territory.id}>
-                  <circle
-                    cx={territory.x}
-                    cy={territory.y}
-                    r="4"
-                    className={`transition-all duration-200 stroke-2 
-                      ${gameState.currentPlayer === 1 && !gameState.aiAction && !gameState.aiThinking ? 'cursor-pointer hover:scale-110' : 'cursor-default'}
-                      ${owner === 1 ? 'fill-blue-400 stroke-blue-600' : 
-                        owner === 2 ? 'fill-red-400 stroke-red-600' : 
-                        'fill-gray-300 stroke-gray-500'}
-                      ${isSelected ? 'stroke-yellow-400 stroke-4' : ''}
-                      ${canBeTargeted ? 'fill-yellow-300 stroke-yellow-500' : ''}
-                      ${isAttacking ? 'animate-pulse stroke-orange-400 stroke-4' : ''}
-                      ${isGlowing ? 'glowing stroke-green-400 stroke-4 drop-shadow-lg' : ''}
-                      ${gameState.currentPlayer === 2 || gameState.aiAction || gameState.aiThinking ? 'opacity-75' : ''}`}
-                    onClick={() => handleTerritoryClick(territory.id)}
-                  />
-                  {(armies > 0 || owner !== null) && (
-                    <text
-                      x={territory.x}
-                      y={territory.y + 0.5}
-                      textAnchor="middle"
-                      className={`${zoomLevel <= 0.7 ? 'text-xs' : 'text-xs'} font-bold fill-white pointer-events-none`}
-                      style={{ fontSize: zoomLevel <= 0.7 ? '3px' : '12px' }}
-                    >
-                      {armies}
-                    </text>
-                  )}
-                  {(isSelected || canBeTargeted || isAttacking) && (
-                    <text
-                      x={territory.x + 5}
-                      y={territory.y}
-                      textAnchor="start"
-                      className={`text-xs font-bold pointer-events-none ${
-                        owner === 1 ? 'fill-blue-600' : 
-                        owner === 2 ? 'fill-red-600' : 
-                        'fill-gray-600'
-                      }`}
-                      style={{ fontSize: zoomLevel <= 0.7 ? '3px' : '4px' }}
-                    >
-                      {territory.name}
-                    </text>
-                  )}
                   
-                  {territory.neighbors.map(neighborId => {
-                    const neighbor = territories.find(t => t.id === neighborId);
-                    if (neighbor && territory.id < neighborId) {
-                      const isAttackLine = gameState.aiAction && 
-                                          gameState.aiAction.type === 'attacking' && 
-                                          ((gameState.aiAction.from === territory.id && gameState.aiAction.to === neighborId) ||
-                                           (gameState.aiAction.from === neighborId && gameState.aiAction.to === territory.id));
+                  <div className="space-y-4 mb-6">
+                    <h2 className="text-lg font-semibold text-gray-700">Game Rules:</h2>
+                    <ul className="text-sm text-gray-600 space-y-2">
+                      <li>• Conquer all territories to win</li>
+                      <li>• Turn in 3 phases: Deploy, Attack, Fortify</li>
+                      <li>• Battles are resolved with dice (more armies = advantage)</li>
+                      <li>• Reinforce your borders and attack strategically</li>
+                      <li>• Each player starts with 9 territories and 8 armies to deploy</li>
+                      <li>• Reinforcements: number of territories ÷ 3 (rounded down)</li>
+                    </ul>
+                  </div>
+                  
+                  <button
+                    onClick={initializeGame}
+                    className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                  >
+                    Start Game
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 p-4">
+              <div className="max-w-7xl mx-auto">
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="flex items-center space-x-4">
+                      <Crown className={`${zoomLevel <= 0.7 ? 'w-6 h-6' : 'w-8 h-8'} text-amber-400`} />
+                      <h1 className={`${zoomLevel <= 0.7 ? 'text-xl' : 'text-2xl'} font-bold text-white`}>Conquest</h1>
+                      <span className={`text-amber-300 ${zoomLevel <= 0.7 ? 'text-sm' : ''}`}>Turn {gameState.turn}</span>
+                    </div>
+                    
+                    <div className="text-center flex-1">
+                      <div className={`${zoomLevel <= 0.7 ? 'text-xl' : 'text-2xl'} font-bold text-amber-300 mb-1`}>
+                        {gameState.phase === 'initialDeploy' ? 'INITIAL DEPLOYMENT' : 
+                         gameState.phase === 'deploy' ? 'DEPLOYMENT' : 
+                         gameState.phase === 'attack' ? 'ATTACK' : 'FORTIFY'}
+                      </div>
+                    </div>
+                    
+                    {gameState.winner ? (
+                      <div className="text-center">
+                        <div className={`${zoomLevel <= 0.7 ? 'text-xl' : 'text-2xl'} font-bold text-amber-400 mb-2`}>
+                          🎉 {gameState.players[gameState.winner].name} won! 🎉
+                        </div>
+                        <button
+                          onClick={() => window.location.reload()}
+                          className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg"
+                        >
+                          New Game
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-right">
+                        <div className={`text-white ${zoomLevel <= 0.7 ? 'text-base' : 'text-lg'} font-semibold`}>
+                          Current player: <span className={`px-3 py-1 rounded-full text-white ${gameState.players[gameState.currentPlayer].color}`}>
+                            {gameState.players[gameState.currentPlayer].name}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className={`grid grid-cols-2 gap-4 ${zoomLevel <= 0.7 ? 'mb-2' : 'mb-4'}`}>
+                    {[1, 2].map(playerId => {
+                      const playerTerritories = Object.keys(territoryStates || {})
+                        .filter(id => getTerritoryOwner(parseInt(id)) === playerId);
+                      
+                      const totalArmiesOnBoard = playerTerritories.reduce((sum, id) => {
+                        return sum + getTerritoryArmies(parseInt(id));
+                      }, 0);
                       
                       return (
-                        <line
-                          key={`${territory.id}-${neighborId}`}
-                          x1={territory.x}
-                          y1={territory.y}
-                          x2={neighbor.x}
-                          y2={neighbor.y}
-                          className={`stroke-1 ${isAttackLine ? 'stroke-orange-500 stroke-2 animate-pulse' : 'stroke-gray-400 opacity-50'}`}
-                        />
+                        <div key={playerId} className={`${zoomLevel <= 0.7 ? 'p-2' : 'p-4'} rounded-lg ${gameState.currentPlayer === playerId ? 'bg-white/20' : 'bg-white/10'}`}>
+                          <div className="flex items-center space-x-2 mb-2">
+                            <div className={`${zoomLevel <= 0.7 ? 'w-3 h-3' : 'w-4 h-4'} rounded-full ${gameState.players[playerId].color}`}></div>
+                            <span className={`text-white font-semibold ${zoomLevel <= 0.7 ? 'text-sm' : ''}`}>{gameState.players[playerId].name}</span>
+                          </div>
+                          <div className={`${zoomLevel <= 0.7 ? 'text-xs' : 'text-sm'} text-gray-300 space-y-1`}>
+                            <div className="flex items-center space-x-2">
+                              <Users className={`${zoomLevel <= 0.7 ? 'w-3 h-3' : 'w-4 h-4'}`} />
+                              <span>Armies to deploy: {gameState.players[playerId].armies}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Shield className={`${zoomLevel <= 0.7 ? 'w-3 h-3' : 'w-4 h-4'}`} />
+                              <span>Armies on board: {totalArmiesOnBoard}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <MapPin className={`${zoomLevel <= 0.7 ? 'w-3 h-3' : 'w-4 h-4'}`} />
+                              <span>Territories: {playerTerritories.length}</span>
+                            </div>
+                          </div>
+                        </div>
                       );
-                    }
-                    return null;
-                  })}
-                </g>
-              );
-            })}
-          </svg>
-          
-          <div className={`mt-4 ${zoomLevel <= 0.7 ? 'text-xs' : 'text-sm'} text-gray-300`}>
-            {gameState.aiAction && gameState.aiAction.message && (
-              <div className="bg-orange-500/20 border border-orange-500 rounded-lg p-3 mb-4 animate-pulse">
-                <p className="text-orange-200 font-semibold">{gameState.aiAction.message}</p>
-              </div>
-            )}
-            
-            {(gameState.phase === 'initialDeploy' || gameState.phase === 'deploy') && 
-             gameState.currentPlayer === 1 && gameState.players[1].armies > 0 && 
-             !gameState.aiAction && !gameState.aiThinking && (
-              <p>Click on your territories to deploy armies ({gameState.players[1].armies} remaining)</p>
-            )}
-            {gameState.phase === 'deploy' && gameState.currentPlayer === 1 && 
-             gameState.players[1].armies === 0 && !gameState.aiAction && !gameState.aiThinking && (
-              <p>Deployment complete - Click "Attack Phase" to continue</p>
-            )}
-            {gameState.phase === 'attack' && gameState.currentPlayer === 1 && 
-             !gameState.aiAction && !gameState.aiThinking && (
-              <p>Select a territory with 2+ armies, then an enemy neighbor territory to attack</p>
-            )}
-            {gameState.phase === 'fortify' && gameState.currentPlayer === 1 && 
-             !gameState.aiAction && !gameState.aiThinking && (
-              <p>Select a territory, then a friendly neighbor territory to transfer armies</p>
-            )}
-          </div>
-          
-          <div className="flex justify-center gap-2 mt-4">
-            <button
-              onClick={() => setZoomLevel(prev => Math.max(0.5, prev - 0.1))}
-              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-              disabled={zoomLevel <= 0.5}
-            >
-              <ZoomOut className="w-4 h-4" />
-              Zoom Out
-            </button>
-            <span className="text-gray-300 px-4 py-2">
-              {Math.round(zoomLevel * 100)}%
-            </span>
-            <button
-              onClick={() => setZoomLevel(prev => Math.min(2, prev + 0.1))}
-              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-              disabled={zoomLevel >= 2}
-            >
-              <ZoomIn className="w-4 h-4" />
-              Zoom In
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+                    })}
+                  </div>
 
-export default ConquestGame;
+                  {gameState.currentPlayer === 1 && !gameState.winner && !gameState.aiAction && (
+                    <div className="flex justify-center space-x-4">
+                      {gameState.phase === 'deploy' && gameState.players[1].armies === 0 && (
+                        <button
+                          onClick={nextPhase}
+                          className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg flex items-center space-x-2"
+                        >
+                          <Sword className="w-4 h-4" />
+                          <span>Attack Phase</span>
+                        </button>
+                      )}
+                      {gameState.phase === 'attack' && (
+                        <button
+                          onClick={nextPhase}
+                          className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg flex items-center space-x-2"
+                        >
+                          <Shield className="w-4 h-4" />
+                          <span>Go to Fortify Phase</span>
+                        </button>
+                      )}
+                      {gameState.phase === 'fortify' && (
+                        <button
+                          onClick={nextPhase}
+                          className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-2 rounded-lg"
+                        >
+                          End Turn
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
+                  <svg 
+                    viewBox="0 0 100 125" 
+                    className="w-full bg-gradient-to-br from-green-100 to-blue-100 rounded-lg"
+                    style={{ 
+                      height: zoomLevel <= 0.7 ? '16rem' : zoomLevel >= 1.3 ? '32rem' : '24rem',
+                      transition: 'height 0.3s ease'
+                    }}
+                  >
+                    {territories.map(territory => {
+                      const owner = getTerritoryOwner(territory.id);
+                      const armies = getTerritoryArmies(territory.id);
+                      const isSelected = gameState.selectedTerritory === territory.id;
+                      const canBeTargeted = gameState.selectedTerritory && 
+                                           (gameState.phase === 'attack' ? canAttack(gameState.selectedTerritory, territory.id) :
+                                            gameState.phase === 'fortify' ? canFortify(gameState.selectedTerritory, territory.id) : false);
+                      const isAttacking = gameState.aiAction && 
+                                         gameState.aiAction.type === 'attacking' && 
+                                         (gameState.aiAction.from === territory.id || gameState.aiAction.to === territory.id);
+                      const isGlowing = gameState.glowingTerritory === territory.id;
+                      
+                      return (
+                        <g key={territory.id}>
+                          <circle
+                            cx={territory.x}
+                            cy={territory.y}
+                            r="4"
+                            className={`transition-all duration-200 stroke-2 
+                              ${gameState.currentPlayer === 1 && !gameState.aiAction && !gameState.aiThinking ? 'cursor-pointer hover:scale-110' : 'cursor-default'}
+                              ${owner === 1 ? 'fill-blue-400 stroke-blue-600' : 
+                                owner === 2 ? 'fill-red-400 stroke-red-600' : 
+                                'fill-gray-300 stroke-gray-500'}
+                              ${isSelected ? 'stroke-yellow-400 stroke-4' : ''}
+                              ${canBeTargeted ? 'fill-yellow-300 stroke-yellow-500' : ''}
+                              ${isAttacking ? 'animate-pulse stroke-orange-400 stroke-4' : ''}
+                              ${isGlowing ? 'glowing stroke-green-400 stroke-4 drop-shadow-lg' : ''}
+                              ${gameState.currentPlayer === 2 || gameState.aiAction || gameState.aiThinking ? 'opacity-75' : ''}`}
+                            onClick={() => handleTerritoryClick(territory.id)}
+                          />
+                          {(armies > 0 || owner !== null) && (
+                            <text
+                              x={territory.x}
+                              y={territory.y + 0.5}
+                              textAnchor="middle"
+                              className={`${zoomLevel <= 0.7 ? 'text-xs' : 'text-xs'} font-bold fill-white pointer-events-none`}
+                              style={{ fontSize: zoomLevel <= 0.7 ? '3px' : '12px' }}
+                            >
+                              {armies}
+                            </text>
+                          )}
+                          {(isSelected || canBeTargeted || isAttacking) && (
+                            <text
+                              x={territory.x + 5}
+                              y={territory.y}
+                              textAnchor="start"
+                              className={`text-xs font-bold pointer-events-none ${
+                                owner === 1 ? 'fill-blue-600' : 
+                                owner === 2 ? 'fill-red-600' : 
+                                'fill-gray-600'
+                              }`}
+                              style={{ fontSize: zoomLevel <= 0.7 ? '3px' : '4px' }}
+                            >
+                              {territory.name}
+                            </text>
+                          )}
+                          
+                          {territory.neighbors.map(neighborId => {
+                            const neighbor = territories.find(t => t.id === neighborId);
+                            if (neighbor && territory.id < neighborId) {
+                              const isAttackLine = gameState.aiAction && 
+                                                  gameState.aiAction.type === 'attacking' && 
+                                                  ((gameState.aiAction.from === territory.id && gameState.aiAction.to === neighborId) ||
+                                                   (gameState.aiAction.from === neighborId && gameState.aiAction.to === territory.id));
+                              
+                              return (
+                                <line
+                                  key={`${territory.id}-${neighborId}`}
+                                  x1={territory.x}
+                                  y1={territory.y}
+                                  x2={neighbor.x}
+                                  y2={neighbor.y}
+                                  className={`stroke-1 ${isAttackLine ? 'stroke-orange-500 stroke-2 animate-pulse' : 'stroke-gray-400 opacity-50'}`}
+                                />
+                              );
+                            }
+                            return null;
+                          })}
+                        </g>
+                      );
+                    })}
+                  </svg>
+                  
+                  <div className={`mt-4 ${zoomLevel <= 0.7 ? 'text-xs' : 'text-sm'} text-gray-300`}>
+                    {gameState.aiAction && gameState.aiAction.message && (
+                      <div className="bg-orange-500/20 border border-orange-500 rounded-lg p-3 mb-4 animate-pulse">
+                        <p className="text-orange-200 font-semibold">{gameState.aiAction.message}</p>
+                      </div>
+                    )}
+                    
+                    {(gameState.phase === 'initialDeploy' || gameState.phase === 'deploy') && 
+                     gameState.currentPlayer === 1 && gameState.players[1].armies > 0 && 
+                     !gameState.aiAction && !gameState.aiThinking && (
+                      <p>Click on your territories to deploy armies ({gameState.players[1].armies} remaining)</p>
+                    )}
+                    {gameState.phase === 'deploy' && gameState.currentPlayer === 1 && 
+                     gameState.players[1].armies === 0 && !gameState.aiAction && !gameState.aiThinking && (
+                      <p>Deployment complete - Click "Attack Phase" to continue</p>
+                    )}
+                    {gameState.phase === 'attack' && gameState.currentPlayer === 1 && 
+                     !gameState.aiAction && !gameState.aiThinking && (
+                      <p>Select a territory with 2+ armies, then an enemy neighbor territory to attack</p>
+                    )}
+                    {gameState.phase === 'fortify' && gameState.currentPlayer === 1 && 
+                     !gameState.aiAction && !gameState.aiThinking && (
+                      <p>Select a territory, then a friendly neighbor territory to transfer armies</p>
+                    )}
+                  </div>
+                  
+                  <div className="flex justify-center gap-2 mt-4">
+                    <button
+                      onClick={() => setZoomLevel(prev => Math.max(0.5, prev - 0.1))}
+                      className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                      disabled={zoomLevel <= 0.5}
+                    >
+                      <ZoomOut className="w-4 h-4" />
+                      Zoom Out
+                    </button>
+                    <span className="text-gray-300 px-4 py-2">
+                      {Math.round(zoomLevel * 100)}%
+                    </span>
+                    <button
+                      onClick={() => setZoomLevel(prev => Math.min(2, prev + 0.1))}
+                      className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                      disabled={zoomLevel >= 2}
+                    >
+                      <ZoomIn className="w-4 h-4" />
+                      Zoom In
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        // Monter le composant
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(ConquestGame));
+    </script>
+</body>
+</html>
