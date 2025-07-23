@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bataille de Territoires</title>
+    <meta name="description" content="Jeu de stratégie avec IA redoutable - Conquérez le plateau !">
+    <meta name="theme-color" content="#1e293b">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIkJhdGFpbGxlIGRlIFRlcnJpdG9pcmVzIiwKICAic2hvcnRfbmFtZSI6ICJUZXJyaXRvcnkiLAogICJkZXNjcmlwdGlvbiI6ICJKZXUgZGUgc3RyYXTDqWdpZSBhdmVjIElBIHJlZG91dGFibGUiLAogICJzdGFydF91cmwiOiAiLiIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiIzFlMjkzYiIsCiAgInRoZW1lX2NvbG9yIjogIiMxZTI5M2IiLAogICJvcmllbnRhdGlvbiI6ICJwb3J0cmFpdCIsCiAgImljb25zIjogWwogICAgewogICAgICAic3JjIjogImRhdGE6aW1hZ2Uvc3ZnK3htbDtiYXNlNjQsUEhOMlp5QjNhV1IwYUQwaU1USTRJaUJvWldsbmFIUTlJakV5T0NJZ2RtbGxkMEp2ZUQwaU1DQXdJREV5T0NBeU9DSWdabWxzYkQwaUl6RmxNamt6WWlJZ2VHMXNibk05SW1oMGRIQTZMeTkzZDNjdWR6TXViM0puTHpJd01EQXZjM1puSWo0OGNtVmpkQ0IzYVdSMGFEMGlNVEk0SWlCb1pXbG5hSFE5SWpFeU9DSWdabWxzYkQwaUkwWkdNREF3TUNJdlBqeDBaWGgwSUhnOUlqWTBJaUI1UFNJMk5DSWdkR1Y0ZEMxaGJtTm9iM0k5SW0xcFpHUnNaU0lnWm1sc2JEMGlJMlptWmlJZ1ptOXVkQzFtWVcxcGJIazlJazF2Ym05emNHRmpaU0lnWm05dWRDMXphWHBsUFNJeU5DSWdabTl1ZEMxM1pXbG5hSFE5SW1KdmJHUWlQa0k4TDNSbGVIUStQQzl6ZG1jKyIsCiAgICAgICJzaXplcyI6ICIxMjh4MTI4IiwKICAgICAgInR5cGUiOiAiaW1hZ2Uvc3ZnK3htbCIKICAgIH0sCiAgICB7CiAgICAgICJzcmMiOiAiZGF0YTppbWFnZS9zdmcreG1sO2Jhc2U2NCxQSE4yWnlCM2FXUjBhRDBpTlRFeUlpQm9aV2xuYUhROUlqVXhNaUlnZG1sbGQwSnZlRDBpTUNBd0lEVXhNaUExTVRJaUlHWnBiR3c5SWlNeE9USmxkbVFpSUdobGJXOXVjMGxqYjI0OUluZGhlV1pwYmlCMGNtRnVjMlpsY20wOWRISmhibk5zWVhSbEtDMHlOVFlnTFRJMU5pa2lJSE4wY205clpUMGlJakFnTVRGQk5EQkJOREFpUGp4eVpXTjBJSGRwWkhSb1BTSTFNVElpSUdobGFXZG9kRDBpTlRFeUlpQm1hV3hzUFNJaU0ySmpPVGczSWk4K1BIUmxlSFFnZUQwaU1qVTJJaUI1UFNJeU5UWWlJSFJsZUhRdFlXNWphRzl5UFNKdGFXUmtiR1VpSUdacGJHdzlJaU5tWm1ZaUlHWnZiblF0Wm1GdGFXeDVQU0pOYjI1dmMzQmhZMlVpSUdadmJuUXRjMmw2WlQwaU5EZ2lJR1p2Ym5RdGQyVnBaMmgwUFNKaWIyeGtJajVDUEM5MFpYaDBQanh5WldOMElIZzlJalF3SWlCNVBTSTBNQ0lnZDJsa2RHZzlJalF6TWlJZ2FHVnBaMmgwUFNJME16SWlJSEo0UFNJeU1DSWdabWxzYkQwaU16RmlOVGRpWmlJdlBqeDNkRDBpTkRJMElpQm9QU0l4SWlCbWFXeHNQU0lqTWpjMlpqVXlJaTgrUEM5emRtYysiLAogICAgICAic2l6ZXMiOiAiNTEyeDUxMiIsCiAgICAgICJ0eXBlIjogImltYWdlL3N2Zyt4bWwiCiAgICB9CiAgXQp9">
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+            overscroll-behavior: none;
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        
+        .container {
+            max-width: 28rem;
+            margin: 0 auto;
+            padding: 0.75rem;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+        
+        .title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .subtitle {
+            font-size: 0.875rem;
+            color: #64748b;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            padding: 1rem;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+        }
+        
+        .button-primary {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .button-primary:hover {
+            background: #2563eb;
+        }
+        
+        .button-secondary {
+            background: #f1f5f9;
+            color: #475569;
+        }
+        
+        .button-secondary:hover {
+            background: #e2e8f0;
+        }
+        
+        .button-red {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .button-red:hover {
+            background: #dc2626;
+        }
+        
+        .button-yellow {
+            background: #eab308;
+            color: white;
+        }
+        
+        .button-yellow:hover {
+            background: #ca8a04;
+        }
+        
+        .button-disabled {
+            background: #f1f5f9;
+            color: #94a3b8;
+            cursor: not-allowed;
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+        
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 1px;
+            background: #cbd5e1;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            position: relative;
+            max-width: 100%;
+            aspect-ratio: 1;
+            overflow: hidden;
+        }
+        
+        .cell {
+            aspect-ratio: 1;
+            min-width: 0;
+            min-height: 0;
+            border: 1px solid #cbd5e1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: 0.125rem;
+            background: #f8fafc;
+        }
+        
+        .cell:hover {
+            border-color: #94a3b8;
+        }
+        
+        .cell:active {
+            transform: scale(0.95);
+        }
+        
+        .cell-empty {
+            background: #f8fafc;
+        }
+        
+        .cell-valid {
+            background: #dcfce7;
+            border-color: #16a34a;
+        }
+        
+        .cell-valid:hover {
+            background: #bbf7d0;
+        }
+        
+        .cell-player1 {
+            background: #3b82f6;
+            border-color: #1d4ed8;
+        }
+        
+        .cell-player2 {
+            background: #ef4444;
+            border-color: #dc2626;
+        }
+        
+        .piece {
+            width: 80%;
+            height: 80%;
+            border-radius: 50%;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            border: 1px solid;
+            max-width: 1.5rem;
+            max-height: 1.5rem;
+        }
+        
+        .piece-blue {
+            background: #1d4ed8;
+            border-color: #1e3a8a;
+        }
+        
+        .piece-red {
+            background: #dc2626;
+            border-color: #991b1b;
+        }
+        
+        .piece-hint-green {
+            background: #16a34a;
+            opacity: 0.5;
+            width: 60%;
+            height: 60%;
+            max-width: 1rem;
+            max-height: 1rem;
+        }
+        
+        .piece-hint-yellow {
+            background: #eab308;
+            opacity: 0.7;
+            width: 60%;
+            height: 60%;
+            max-width: 1rem;
+            max-height: 1rem;
+        }
+        
+        .flex {
+            display: flex;
+        }
+        
+        .flex-between {
+            justify-content: space-between;
+        }
+        
+        .flex-center {
+            justify-content: center;
+        }
+        
+        .items-center {
+            align-items: center;
+        }
+        
+        .gap-2 {
+            gap: 0.5rem;
+        }
+        
+        .gap-1 {
+            gap: 0.25rem;
+        }
+        
+        .text-center {
+            text-align: center;
+        }
+        
+        .text-lg {
+            font-size: 1.125rem;
+        }
+        
+        .text-xl {
+            font-size: 1.25rem;
+        }
+        
+        .text-sm {
+            font-size: 0.875rem;
+        }
+        
+        .text-xs {
+            font-size: 0.75rem;
+        }
+        
+        .font-bold {
+            font-weight: bold;
+        }
+        
+        .font-medium {
+            font-weight: 500;
+        }
+        
+        .text-blue {
+            color: #1d4ed8;
+        }
+        
+        .text-red {
+            color: #dc2626;
+        }
+        
+        .text-slate {
+            color: #475569;
+        }
+        
+        .text-slate-light {
+            color: #64748b;
+        }
+        
+        .bg-blue-light {
+            background: #dbeafe;
+            color: #1d4ed8;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            border: 2px solid #93c5fd;
+        }
+        
+        .bg-red-light {
+            background: #fee2e2;
+            color: #dc2626;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            border: 2px solid #fca5a5;
+        }
+        
+        .bg-yellow-light {
+            background: #fef3c7;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .thinking-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        
+        .thinking-box {
+            background: white;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .spinner {
+            width: 1.5rem;
+            height: 1.5rem;
+            border: 3px solid #fee2e2;
+            border-top: 3px solid #dc2626;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        .dots {
+            display: flex;
+            gap: 0.25rem;
+            margin-left: 0.5rem;
+        }
+        
+        .dot {
+            width: 0.5rem;
+            height: 0.5rem;
+            background: #ef4444;
+            border-radius: 50%;
+            animation: bounce 1.4s ease-in-out infinite both;
+        }
+        
+        .dot:nth-child(1) { animation-delay: -0.32s; }
+        .dot:nth-child(2) { animation-delay: -0.16s; }
+        
+        .install-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 12px 20px;
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+            z-index: 1000;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .install-btn:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+        
+        label {
+            display: block;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .score-display {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .score-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            flex: 1;
+        }
+        
+        .score-item:first-child {
+            margin-right: 0.5rem;
+        }
+        
+        .score-item:last-child {
+            margin-left: 0.5rem;
+        }
+        
+        .score-dot {
+            width: 1.25rem;
+            height: 1.25rem;
+            border-radius: 50%;
+        }
+        
+        .score-dot-blue {
+            background: #1d4ed8;
+        }
+        
+        .score-dot-red {
+            background: #dc2626;
+        }
+        
+        .power-icons {
+            display: flex;
+            gap: 0.25rem;
+        }
+        
+        .power-icon {
+            width: 1rem;
+            height: 1rem;
+            position: relative;
+        }
+        
+        .power-icon::before {
+            content: "⚡";
+            font-size: 1rem;
+        }
+        
+        .power-icon-blue::before {
+            color: #3b82f6;
+        }
+        
+        .power-icon-red::before {
+            color: #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <!-- Header -->
+            <div class="header">
+                <h1 class="title">
+                    🏆 Bataille de Territoires
+                </h1>
+                <p class="subtitle">Conquérez le plateau et dominez votre adversaire !</p>
+            </div>
+            
+            <!-- Mode de jeu -->
+            <div class="card">
+                <h3 class="font-bold text-slate" style="margin-bottom: 0.75rem;">Mode de jeu</h3>
+                <div class="grid-2" style="margin-bottom: 0.75rem;">
+                    <button id="pvpBtn" class="button button-primary">
+                        👥 Joueur vs Joueur
+                    </button>
+                    <button id="aiBtn" class="button button-secondary">
+                        🤖 vs IA
+                    </button>
+                </div>
+                
+                <div id="difficultySection" class="hidden">
+                    <label for="difficulty">Difficulté de l'IA:</label>
+                    <select id="difficulty">
+                        <option value="facile">😊 Facile</option>
+                        <option value="moyen">🤔 Moyen</option>
+                        <option value="difficile">😤 Difficile</option>
+                        <option value="expert" selected>🧠 Expert</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Statut du joueur -->
+            <div class="card">
+                <div id="gameStatus" class="text-center">
+                    <h3 class="text-lg font-bold text-slate" style="margin-bottom: 0.5rem;">Tour du joueur</h3>
+                    <div id="currentPlayerDisplay" class="bg-blue-light">
+                        <div class="flex items-center gap-2 flex-center">
+                            <div class="score-dot score-dot-blue"></div>
+                            <span>Joueur 1</span>
+                            <div id="thinkingDots" class="dots hidden">
+                                <div class="dot"></div>
+                                <div class="dot"></div>
+                                <div class="dot"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="gameOverScreen" class="text-center hidden">
+                    <h3 class="text-xl font-bold text-slate" style="margin-bottom: 0.5rem;">Jeu Terminé !</h3>
+                    <p id="winnerText" class="text-lg" style="margin-bottom: 1rem;"></p>
+                    <button id="newGameBtn" class="button button-primary">
+                        🔄 Nouvelle Partie
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Scores -->
+            <div class="card">
+                <div class="score-display">
+                    <div id="player1Score" class="score-item bg-blue-light">
+                        <div class="score-dot score-dot-blue"></div>
+                        <span class="font-medium text-slate text-sm">J1</span>
+                        <span id="score1" class="text-lg font-bold text-blue" style="margin-left: auto;">2</span>
+                    </div>
+                    <div id="player2Score" class="score-item">
+                        <div class="score-dot score-dot-red"></div>
+                        <span class="font-medium text-slate text-sm">J2</span>
+                        <span id="score2" class="text-lg font-bold text-red" style="margin-left: auto;">2</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Pouvoirs spéciaux -->
+            <div class="card">
+                <div class="flex flex-between items-center" style="margin-bottom: 0.75rem;">
+                    <h3 class="font-bold text-slate flex items-center gap-2">
+                        ⚡ Pouvoirs
+                    </h3>
+                    <button id="specialBtn" class="button button-secondary text-sm">
+                        Activer
+                    </button>
+                </div>
+                <div class="flex flex-between text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="text-slate">J1:</span>
+                        <div id="powers1" class="power-icons">
+                            <div class="power-icon power-icon-blue"></div>
+                            <div class="power-icon power-icon-blue"></div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-slate">J2:</span>
+                        <div id="powers2" class="power-icons">
+                            <div class="power-icon power-icon-red"></div>
+                            <div class="power-icon power-icon-red"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="specialModeInfo" class="bg-yellow-light text-xs text-center hidden">
+                    Mode spécial activé ! Touchez une case adverse pour la convertir.
+                </div>
+            </div>
+            
+            <!-- Plateau de jeu -->
+            <div class="card" style="position: relative;">
+                <div id="thinkingOverlay" class="thinking-overlay hidden">
+                    <div class="thinking-box">
+                        <div class="flex items-center gap-2">
+                            <div class="spinner"></div>
+                            <span class="font-medium text-slate">L'IA réfléchit...</span>
+                        </div>
+                    </div>
+                </div>
+                <div id="gameBoard" class="board">
+                    <!-- Les cellules seront générées par JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Règles -->
+            <details class="card">
+                <summary style="cursor: pointer; font-weight: bold; color: #1e293b;">
+                    📖 Règles du jeu
+                </summary>
+                <div style="margin-top: 1rem;">
+                    <ul class="text-sm text-slate-light" style="line-height: 1.6;">
+                        <li>• Placez vos pions pour encadrer les adverses</li>
+                        <li>• Les pions encadrés deviennent vôtres</li>
+                        <li>• Cases vertes = coups valides</li>
+                        <li>• Utilisez vos pouvoirs spéciaux avec stratégie</li>
+                        <li>• L'IA devient plus forte avec la difficulté !</li>
+                        <li>• Gagnez avec le plus de territoires !</li>
+                    </ul>
+                </div>
+            </details>
+        </div>
+    </div>
+    
+    <!-- Install Button -->
+    <button id="installBtn" class="install-btn hidden">
+        📱 Installer l'App
+    </button>
+    
+    <script>
+        // Game State
+        let gameState = {
+            board: Array(8).fill().map(() => Array(8).fill(null)),
+            currentPlayer: 1,
+            scores: { player1: 2, player2: 2 },
+            gameOver: false,
+            winner: null,
+            specialPowers: { player1: 2, player2: 2 },
+            gameMode: 'pvp',
+            aiDifficulty: 'expert',
+            isAiThinking: false,
+            specialMode: false
+        };
+        
+        // Elements
+        const elements = {
+            pvpBtn: document.getElementById('pvpBtn'),
+            aiBtn: document.getElementById('aiBtn'),
+            difficultySection: document.getElementById('difficultySection'),
+            difficulty: document.getElementById('difficulty'),
+            gameStatus: document.getElementById('gameStatus'),
+            gameOverScreen: document.getElementById('gameOverScreen'),
+            currentPlayerDisplay: document.getElementById('currentPlayerDisplay'),
+            thinkingDots: document.getElementById('thinkingDots'),
+            winnerText: document.getElementById('winnerText'),
+            newGameBtn: document.getElementById('newGameBtn'),
+            player1Score: document.getElementById('player1Score'),
+            player2Score: document.getElementById('player2Score'),
+            score1: document.getElementById('score1'),
+            score2: document.getElementById('score2'),
+            specialBtn: document.getElementById('specialBtn'),
+            specialModeInfo: document.getElementById('specialModeInfo'),
+            powers1: document.getElementById('powers1'),
+            powers2: document.getElementById('powers2'),
+            gameBoard: document.getElementById('gameBoard'),
+            thinkingOverlay: document.getElementById('thinkingOverlay'),
+            installBtn: document.getElementById('installBtn')
+        };
+        
+        // Initialize game
+        function initGame() {
+            gameState.board = Array(8).fill().map(() => Array(8).fill(null));
+            gameState.board[3][3] = 1;
+            gameState.board[4][4] = 1;
+            gameState.board[3][4] = 2;
+            gameState.board[4][3] = 2;
+            gameState.currentPlayer = 1;
+            gameState.gameOver = false;
+            gameState.winner = null;
+            gameState.specialPowers = { player1: 2, player2: 2 };
+            gameState.specialMode = false;
+            gameState.isAiThinking = false;
+            
+            calculateScores();
+            createBoard();
+            updateUI();
+        }
+        
+        // Create board HTML
+        function createBoard() {
+            elements.gameBoard.innerHTML = '';
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell cell-empty';
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    cell.addEventListener('click', () => handleCellClick(row, col));
+                    elements.gameBoard.appendChild(cell);
+                }
+            }
+        }
+        
+        // Update UI
+        function updateUI() {
+            updateBoard();
+            updateScores();
+            updateCurrentPlayer();
+            updatePowers();
+            updateGameMode();
+        }
+        
+        function updateBoard() {
+            const cells = elements.gameBoard.children;
+            for (let i = 0; i < cells.length; i++) {
+                const row = Math.floor(i / 8);
+                const col = i % 8;
+                const cell = cells[i];
+                const cellValue = gameState.board[row][col];
+                
+                // Reset classes
+                cell.className = 'cell';
+                cell.innerHTML = '';
+                
+                if (cellValue === 1) {
+                    cell.className += ' cell-player1';
+                    cell.innerHTML = '<div class="piece piece-blue"></div>';
+                } else if (cellValue === 2) {
+                    cell.className += ' cell-player2';
+                    cell.innerHTML = '<div class="piece piece-red"></div>';
+                } else {
+                    const isValid = !gameState.gameOver && isValidMove(gameState.board, row, col, gameState.currentPlayer);
+                    
+                    if (isValid && !gameState.specialMode && !(gameState.gameMode === 'ai' && gameState.currentPlayer === 2)) {
+                        cell.className += ' cell-valid';
+                        cell.innerHTML = '<div class="piece piece-hint-green"></div>';
+                    } else if (gameState.specialMode && cellValue !== null && cellValue !== gameState.currentPlayer && !(gameState.gameMode === 'ai' && gameState.currentPlayer === 2)) {
+                        cell.className += ' cell-empty';
+                        cell.innerHTML = '<div class="piece piece-hint-yellow"></div>';
+                    } else {
+                        cell.className += ' cell-empty';
+                    }
+                }
+            }
+        }
+        
+        function updateScores() {
+            elements.score1.textContent = gameState.scores.player1;
+            elements.score2.textContent = gameState.scores.player2;
+            
+            // Update score highlighting
+            elements.player1Score.className = 'score-item ' + (gameState.currentPlayer === 1 ? 'bg-blue-light' : '');
+            elements.player2Score.className = 'score-item ' + (gameState.currentPlayer === 2 ? 'bg-red-light' : '');
+        }
+        
+        function updateCurrentPlayer() {
+            if (gameState.gameOver) {
+                elements.gameStatus.classList.add('hidden');
+                elements.gameOverScreen.classList.remove('hidden');
+                
+                if (gameState.winner) {
+                    const winnerName = gameState.gameMode === 'ai' ? 
+                        (gameState.winner === 1 ? 'Vous gagnez ! 🎉' : 'L\'IA gagne ! 🤖') :
+                        `Joueur ${gameState.winner} gagne !`;
+                    elements.winnerText.innerHTML = `<span class="${gameState.winner === 1 ? 'text-blue' : 'text-red'}">${winnerName}</span>`;
+                } else {
+                    elements.winnerText.innerHTML = '<span class="text-slate">Match nul !</span>';
+                }
+            } else {
+                elements.gameStatus.classList.remove('hidden');
+                elements.gameOverScreen.classList.add('hidden');
+                
+                const playerName = gameState.gameMode === 'ai' ? 
+                    (gameState.currentPlayer === 1 ? 'Vous' : 'IA') :
+                    `Joueur ${gameState.currentPlayer}`;
+                
+                elements.currentPlayerDisplay.className = gameState.currentPlayer === 1 ? 'bg-blue-light' : 'bg-red-light';
+                elements.currentPlayerDisplay.innerHTML = `
+                    <div class="flex items-center gap-2 flex-center">
+                        <div class="score-dot ${gameState.currentPlayer === 1 ? 'score-dot-blue' : 'score-dot-red'}"></div>
+                        <span>${playerName}</span>
+                        <div id="thinkingDots" class="dots ${gameState.isAiThinking ? '' : 'hidden'}">
+                            <div class="dot"></div>
+                            <div class="dot"></div>
+                            <div class="dot"></div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        function updatePowers() {
+            // Update power displays
+            elements.powers1.innerHTML = '';
+            for (let i = 0; i < gameState.specialPowers.player1; i++) {
+                elements.powers1.innerHTML += '<div class="power-icon power-icon-blue"></div>';
+            }
+            
+            elements.powers2.innerHTML = '';
+            for (let i = 0; i < gameState.specialPowers.player2; i++) {
+                elements.powers2.innerHTML += '<div class="power-icon power-icon-red"></div>';
+            }
+            
+            // Update special button
+            const canUseSpecial = gameState.specialPowers[`player${gameState.currentPlayer}`] > 0 && 
+                                  !gameState.gameOver && 
+                                  !(gameState.gameMode === 'ai' && gameState.currentPlayer === 2) && 
+                                  !gameState.isAiThinking;
+            
+            if (gameState.specialMode) {
+                elements.specialBtn.textContent = 'Annuler';
+                elements.specialBtn.className = 'button button-yellow text-sm';
+            } else if (canUseSpecial) {
+                elements.specialBtn.textContent = 'Activer';
+                elements.specialBtn.className = 'button button-secondary text-sm';
+            } else {
+                elements.specialBtn.textContent = 'Activer';
+                elements.specialBtn.className = 'button button-disabled text-sm';
+            }
+            
+            elements.specialModeInfo.classList.toggle('hidden', !gameState.specialMode);
+            
+            // Update labels
+            const labels = elements.gameBoard.parentElement.querySelectorAll('.text-slate');
+            if (gameState.gameMode === 'ai') {
+                document.querySelector('#powers1').parentElement.querySelector('.text-slate').textContent = 'Vous:';
+                document.querySelector('#powers2').parentElement.querySelector('.text-slate').textContent = 'IA:';
+            } else {
+                document.querySelector('#powers1').parentElement.querySelector('.text-slate').textContent = 'J1:';
+                document.querySelector('#powers2').parentElement.querySelector('.text-slate').textContent = 'J2:';
+            }
+        }
+        
+        function updateGameMode() {
+            if (gameState.gameMode === 'pvp') {
+                elements.pvpBtn.className = 'button button-primary';
+                elements.aiBtn.className = 'button button-secondary';
+                elements.difficultySection.classList.add('hidden');
+            } else {
+                elements.pvpBtn.className = 'button button-secondary';
+                elements.aiBtn.className = 'button button-red';
+                elements.difficultySection.classList.remove('hidden');
+            }
+            
+            elements.thinkingOverlay.classList.toggle('hidden', !gameState.isAiThinking);
+        }
+        
+        // Game logic
+        function isValidMove(board, row, col, player) {
+            if (board[row][col] !== null) return false;
+            
+            const opponent = player === 1 ? 2 : 1;
+            const directions = [[-1,-1], [-1,0], [-1,1], [0,-1], [0,1], [1,-1], [1,0], [1,1]];
+            
+            for (let [dr, dc] of directions) {
+                let r = row + dr;
+                let c = col + dc;
+                let hasOpponent = false;
+                
+                while (r >= 0 && r < 8 && c >= 0 && c < 8 && board[r][c] === opponent) {
+                    hasOpponent = true;
+                    r += dr;
+                    c += dc;
+                }
+                
+                if (hasOpponent && r >= 0 && r < 8 && c >= 0 && c < 8 && board[r][c] === player) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        function hasValidMoves(board, player) {
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    if (isValidMove(board, row, col, player)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        
+        function calculateScores() {
+            let player1Score = 0;
+            let player2Score = 0;
+            
+            gameState.board.forEach(row => {
+                row.forEach(cell => {
+                    if (cell === 1) player1Score++;
+                    if (cell === 2) player2Score++;
+                });
+            });
+            
+            gameState.scores = { player1: player1Score, player2: player2Score };
+            
+            const totalCells = player1Score + player2Score;
+            if (totalCells === 64 || !hasValidMoves(gameState.board, gameState.currentPlayer)) {
+                gameState.gameOver = true;
+                gameState.winner = player1Score > player2Score ? 1 : player1Score < player2Score ? 2 : null;
+            }
+        }
+        
+        function makeMove(row, col, isSpecial = false) {
+            if (gameState.gameOver || gameState.isAiThinking) return false;
+            
+            if (!isSpecial && !gameState.specialMode && !isValidMove(gameState.board, row, col, gameState.currentPlayer)) {
+                return false;
+            }
+            
+            const newBoard = gameState.board.map(row => [...row]);
+            
+            if (isSpecial || gameState.specialMode) {
+                if (gameState.board[row][col] !== null && 
+                    gameState.board[row][col] !== gameState.currentPlayer && 
+                    gameState.specialPowers[`player${gameState.currentPlayer}`] > 0) {
+                    
+                    newBoard[row][col] = gameState.currentPlayer;
+                    gameState.specialPowers[`player${gameState.currentPlayer}`]--;
+                    gameState.specialMode = false;
+                } else {
+                    return false;
+                }
+            } else {
+                newBoard[row][col] = gameState.currentPlayer;
+                
+                const opponent = gameState.currentPlayer === 1 ? 2 : 1;
+                const directions = [[-1,-1], [-1,0], [-1,1], [0,-1], [0,1], [1,-1], [1,0], [1,1]];
+                
+                for (let [dr, dc] of directions) {
+                    let r = row + dr;
+                    let c = col + dc;
+                    const toFlip = [];
+                    
+                    while (r >= 0 && r < 8 && c >= 0 && c < 8 && newBoard[r][c] === opponent) {
+                        toFlip.push([r, c]);
+                        r += dr;
+                        c += dc;
+                    }
+                    
+                    if (toFlip.length > 0 && r >= 0 && r < 8 && c >= 0 && c < 8 && newBoard[r][c] === gameState.currentPlayer) {
+                        toFlip.forEach(([flipR, flipC]) => {
+                            newBoard[flipR][flipC] = gameState.currentPlayer;
+                        });
+                    }
+                }
+            }
+            
+            gameState.board = newBoard;
+            calculateScores();
+            
+            const nextPlayer = gameState.currentPlayer === 1 ? 2 : 1;
+            if (hasValidMoves(gameState.board, nextPlayer)) {
+                gameState.currentPlayer = nextPlayer;
+            } else if (!hasValidMoves(gameState.board, gameState.currentPlayer)) {
+                gameState.gameOver = true;
+            }
+            
+            updateUI();
+            
+            // Trigger AI move if needed
+            if (gameState.gameMode === 'ai' && gameState.currentPlayer === 2 && !gameState.gameOver) {
+                triggerAiMove();
+            }
+            
+            return true;
+        }
+        
+        // AI Logic
+        function evaluateBoard(board, player) {
+            let score = 0;
+            const opponent = player === 1 ? 2 : 1;
+            
+            const weights = [
+                [100, -20, 10, 5, 5, 10, -20, 100],
+                [-20, -50, -2, -2, -2, -2, -50, -20],
+                [10, -2, -1, -1, -1, -1, -2, 10],
+                [5, -2, -1, -1, -1, -1, -2, 5],
+                [5, -2, -1, -1, -1, -1, -2, 5],
+                [10, -2, -1, -1, -1, -1, -2, 10],
+                [-20, -50, -2, -2, -2, -2, -50, -20],
+                [100, -20, 10, 5, 5, 10, -20, 100]
+            ];
+            
+            for (let i = 0; i < 8; i++) {
+                for (let j = 0; j < 8; j++) {
+                    if (board[i][j] === player) {
+                        score += weights[i][j];
+                    } else if (board[i][j] === opponent) {
+                        score -= weights[i][j];
+                    }
+                }
+            }
+            
+            return score;
+        }
+        
+        function getValidMoves(board, player) {
+            const moves = [];
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    if (isValidMove(board, row, col, player)) {
+                        moves.push({ row, col, isSpecial: false });
+                    }
+                }
+            }
+            return moves;
+        }
+        
+        function getValidSpecialMoves(board, player) {
+            const moves = [];
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    if (board[row][col] !== null && board[row][col] !== player) {
+                        moves.push({ row, col, isSpecial: true });
+                    }
+                }
+            }
+            return moves;
+        }
+        
+        function simulateMove(board, row, col, player, isSpecial = false) {
+            const newBoard = board.map(row => [...row]);
+            
+            if (isSpecial) {
+                newBoard[row][col] = player;
+                return newBoard;
+            }
+            
+            newBoard[row][col] = player;
+            const opponent = player === 1 ? 2 : 1;
+            const directions = [[-1,-1], [-1,0], [-1,1], [0,-1], [0,1], [1,-1], [1,0], [1,1]];
+            
+            for (let [dr, dc] of directions) {
+                let r = row + dr;
+                let c = col + dc;
+                const toFlip = [];
+                
+                while (r >= 0 && r < 8 && c >= 0 && c < 8 && newBoard[r][c] === opponent) {
+                    toFlip.push([r, c]);
+                    r += dr;
+                    c += dc;
+                }
+                
+                if (toFlip.length > 0 && r >= 0 && r < 8 && c >= 0 && c < 8 && newBoard[r][c] === player) {
+                    toFlip.forEach(([flipR, flipC]) => {
+                        newBoard[flipR][flipC] = player;
+                    });
+                }
+            }
+            
+            return newBoard;
+        }
+        
+        function minimax(board, depth, alpha, beta, maximizingPlayer, player, specialPowersLeft) {
+            const opponent = player === 1 ? 2 : 1;
+            
+            if (depth === 0 || !hasValidMoves(board, maximizingPlayer ? player : opponent)) {
+                return { score: evaluateBoard(board, player), move: null };
+            }
+            
+            let bestMove = null;
+            
+            if (maximizingPlayer) {
+                let maxEval = -Infinity;
+                const normalMoves = getValidMoves(board, player);
+                const specialMoves = specialPowersLeft > 0 ? getValidSpecialMoves(board, player) : [];
+                const allMoves = [...normalMoves, ...specialMoves];
+                
+                for (let move of allMoves) {
+                    const newBoard = simulateMove(board, move.row, move.col, player, move.isSpecial);
+                    const newSpecialPowers = move.isSpecial ? specialPowersLeft - 1 : specialPowersLeft;
+                    
+                    const eval_ = minimax(newBoard, depth - 1, alpha, beta, false, player, newSpecialPowers);
+                    
+                    if (eval_.score > maxEval) {
+                        maxEval = eval_.score;
+                        bestMove = move;
+                    }
+                    
+                    alpha = Math.max(alpha, eval_.score);
+                    if (beta <= alpha) break;
+                }
+                
+                return { score: maxEval, move: bestMove };
+            } else {
+                let minEval = Infinity;
+                const normalMoves = getValidMoves(board, opponent);
+                const specialMoves = specialPowersLeft > 0 ? getValidSpecialMoves(board, opponent) : [];
+                const allMoves = [...normalMoves, ...specialMoves];
+                
+                for (let move of allMoves) {
+                    const newBoard = simulateMove(board, move.row, move.col, opponent, move.isSpecial);
+                    const newSpecialPowers = move.isSpecial ? specialPowersLeft - 1 : specialPowersLeft;
+                    
+                    const eval_ = minimax(newBoard, depth - 1, alpha, beta, true, player, newSpecialPowers);
+                    minEval = Math.min(minEval, eval_.score);
+                    
+                    beta = Math.min(beta, eval_.score);
+                    if (beta <= alpha) break;
+                }
+                
+                return { score: minEval, move: bestMove };
+            }
+        }
+        
+        function getAiMove(board, player, specialPowersLeft) {
+            const depths = { 'facile': 2, 'moyen': 4, 'difficile': 6, 'expert': 8 };
+            const depth = depths[gameState.aiDifficulty];
+            
+            if (gameState.aiDifficulty === 'facile' && Math.random() < 0.3) {
+                const normalMoves = getValidMoves(board, player);
+                if (normalMoves.length > 0) {
+                    return normalMoves[Math.floor(Math.random() * normalMoves.length)];
+                }
+            }
+            
+            const result = minimax(board, depth, -Infinity, Infinity, true, player, specialPowersLeft);
+            return result.move;
+        }
+        
+        function triggerAiMove() {
+            gameState.isAiThinking = true;
+            updateUI();
+            
+            const thinkingTime = gameState.aiDifficulty === 'expert' ? 1500 : 
+                                 gameState.aiDifficulty === 'difficile' ? 1000 : 500;
+            
+            setTimeout(() => {
+                const aiMove = getAiMove(gameState.board, 2, gameState.specialPowers.player2);
+                gameState.isAiThinking = false;
+                
+                if (aiMove) {
+                    makeMove(aiMove.row, aiMove.col, aiMove.isSpecial);
+                }
+            }, thinkingTime);
+        }
+        
+        // Event handlers
+        function handleCellClick(row, col) {
+            if (gameState.gameMode === 'ai' && gameState.currentPlayer === 2) return;
+            makeMove(row, col, gameState.specialMode);
+        }
+        
+        function handleSpecialButtonClick() {
+            const canUseSpecial = gameState.specialPowers[`player${gameState.currentPlayer}`] > 0 && 
+                                  !gameState.gameOver && 
+                                  !(gameState.gameMode === 'ai' && gameState.currentPlayer === 2) && 
+                                  !gameState.isAiThinking;
+            
+            if (canUseSpecial || gameState.specialMode) {
+                gameState.specialMode = !gameState.specialMode;
+                updateUI();
+            }
+        }
+        
+        function setGameMode(mode) {
+            gameState.gameMode = mode;
+            initGame();
+        }
+        
+        function setDifficulty() {
+            gameState.aiDifficulty = elements.difficulty.value;
+            initGame();
+        }
+        
+        // Event listeners
+        elements.pvpBtn.addEventListener('click', () => setGameMode('pvp'));
+        elements.aiBtn.addEventListener('click', () => setGameMode('ai'));
+        elements.difficulty.addEventListener('change', setDifficulty);
+        elements.newGameBtn.addEventListener('click', initGame);
+        elements.specialBtn.addEventListener('click', handleSpecialButtonClick);
+        
+        // PWA Install
+        let deferredPrompt;
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            elements.installBtn.classList.remove('hidden');
+        });
+        
+        elements.installBtn.addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    elements.installBtn.classList.add('hidden');
+                }
+                deferredPrompt = null;
+            }
+        });
+        
+        window.addEventListener('appinstalled', () => {
+            elements.installBtn.classList.add('hidden');
+        });
+        
+        if (window.matchMedia('(display-mode: standalone)').matches) {
+            elements.installBtn.classList.add('hidden');
+        }
+        
+        // Initialize
+        initGame();
+    </script>
+</body>
+</html>
