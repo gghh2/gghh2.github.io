@@ -123,23 +123,28 @@
         .board {
             display: grid;
             grid-template-columns: repeat(8, 1fr);
-            gap: 2px;
+            gap: 1px;
             background: #cbd5e1;
-            padding: 0.75rem;
+            padding: 0.5rem;
             border-radius: 0.5rem;
             position: relative;
+            max-width: 100%;
+            aspect-ratio: 1;
+            overflow: hidden;
         }
         
         .cell {
-            width: 2.5rem;
-            height: 2.5rem;
-            border: 2px solid #cbd5e1;
+            aspect-ratio: 1;
+            min-width: 0;
+            min-height: 0;
+            border: 1px solid #cbd5e1;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             transition: all 0.2s;
-            border-radius: 0.25rem;
+            border-radius: 0.125rem;
+            background: #f8fafc;
         }
         
         .cell:hover {
@@ -174,11 +179,13 @@
         }
         
         .piece {
-            width: 1.5rem;
-            height: 1.5rem;
+            width: 80%;
+            height: 80%;
             border-radius: 50%;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-            border: 2px solid;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            border: 1px solid;
+            max-width: 1.5rem;
+            max-height: 1.5rem;
         }
         
         .piece-blue {
@@ -194,15 +201,19 @@
         .piece-hint-green {
             background: #16a34a;
             opacity: 0.5;
-            width: 1rem;
-            height: 1rem;
+            width: 60%;
+            height: 60%;
+            max-width: 1rem;
+            max-height: 1rem;
         }
         
         .piece-hint-yellow {
             background: #eab308;
             opacity: 0.7;
-            width: 1rem;
-            height: 1rem;
+            width: 60%;
+            height: 60%;
+            max-width: 1rem;
+            max-height: 1rem;
         }
         
         .flex {
@@ -1184,4 +1195,4 @@
         initGame();
     </script>
 </body>
-</html>
+    </html>
