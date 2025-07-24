@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong Bluetooth</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 400px;
+            height: 100vh;
+            background: #000;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .menu {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .menu h1 {
+            color: #fff;
+            font-size: 2.5em;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .menu button {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            margin: 10px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            min-width: 200px;
+        }
+
+        .menu button:hover {
+            transform: scale(1.05);
+        }
+
+        .menu button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            color: #fff;
+            margin: 20px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .game-canvas {
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: block;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 150px;
+            background: rgba(255, 255, 255, 0.1);
+            display: none;
+            flex-direction: row;
+        }
+
+        .control-btn {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .control-btn:active {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        .score {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-size: 2em;
+            font-weight: bold;
+            z-index: 10;
+        }
+
+        .connection-status {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .connected {
+            background: #27ae60;
+            color: white;
+        }
+
+        .disconnected {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .waiting {
+            background: #f39c12;
+            color: white;
+        }
+
+        @media (orientation: landscape) {
+            .container {
+                max-width: 100%;
+                height: 100vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="menu" id="menu">
+            <h1>🏓 Pong Bluetooth</h1>
+            <button id="hostBtn">Créer une partie</button>
+            <button id="joinBtn">Rejoindre une partie</button>
+            <button id="soloBtn">Mode Solo (Test)</button>
+            <div class="status" id="status">Choisissez un mode de jeu</div>
+        </div>
+
+        <div class="connection-status disconnected" id="connectionStatus">
+            Déconnecté
+        </div>
+
+        <div class="score" id="score" style="display: none;">
+            0 - 0
+        </div>
+
+        <canvas class="game-canvas" id="gameCanvas"></canvas>
+
+        <div class="controls" id="controls">
+            <div class="control-btn" id="leftBtn">◀</div>
+            <div class="control-btn" id="rightBtn">▶</div>
+        </div>
+    </div>
+
+    <script>
+        class BluetoothPong {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.menu = document.getElementById('menu');
+                this.status = document.getElementById('status');
+                this.score = document.getElementById('score');
+                this.controls = document.getElementById('controls');
+                this.connectionStatus = document.getElementById('connectionStatus');
+
+                this.isHost = false;
+                this.isConnected = false;
+                this.device = null;
+                this.characteristic = null;
+                this.gameRunning = false;
+                this.soloMode = false;
+
+                // État du jeu
+                this.gameState = {
+                    ball: { x: 200, y: 300, dx: 3, dy: 3, radius: 8 },
+                    player1: { x: 150, y: 550, width: 100, height: 10 },
+                    player2: { x: 150, y: 50, width: 100, height: 10 },
+                    score1: 0,
+                    score2: 0
+                };
+
+                this.keys = { left: false, right: false };
+                this.lastUpdate = 0;
+
+                this.setupCanvas();
+                this.setupEventListeners();
+                this.setupBluetoothService();
+            }
+
+            setupCanvas() {
+                const resizeCanvas = () => {
+                    const container = this.canvas.parentElement;
+                    this.canvas.width = container.clientWidth;
+                    this.canvas.height = container.clientHeight;
+                };
+
+                resizeCanvas();
+                window.addEventListener('resize', resizeCanvas);
+            }
+
+            setupEventListeners() {
+                document.getElementById('hostBtn').addEventListener('click', () => this.startHost());
+                document.getElementById('joinBtn').addEventListener('click', () => this.startClient());
+                document.getElementById('soloBtn').addEventListener('click', () => this.startSolo());
+
+                // Contrôles tactiles
+                document.getElementById('leftBtn').addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    this.keys.left = true;
+                });
+                document.getElementById('leftBtn').addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    this.keys.left = false;
+                });
+
+                document.getElementById('rightBtn').addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    this.keys.right = true;
+                });
+                document.getElementById('rightBtn').addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    this.keys.right = false;
+                });
+
+                // Contrôles clavier pour test
+                window.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowLeft') this.keys.left = true;
+                    if (e.key === 'ArrowRight') this.keys.right = true;
+                });
+
+                window.addEventListener('keyup', (e) => {
+                    if (e.key === 'ArrowLeft') this.keys.left = false;
+                    if (e.key === 'ArrowRight') this.keys.right = false;
+                });
+            }
+
+            setupBluetoothService() {
+                // UUID personnalisé pour le service Pong
+                this.serviceUUID = '12345678-1234-5678-9abc-123456789abc';
+                this.characteristicUUID = '87654321-4321-8765-cba9-987654321abc';
+            }
+
+            async startHost() {
+                this.status.textContent = 'Démarrage du serveur Bluetooth...';
+                
+                if (!navigator.bluetooth) {
+                    this.status.textContent = 'Bluetooth non supporté sur ce navigateur';
+                    return;
+                }
+
+                try {
+                    // Note: L'API Web Bluetooth ne permet pas de créer un serveur directement
+                    // Cette partie simule la logique d'hébergement
+                    this.isHost = true;
+                    this.status.textContent = 'En attente de connexion...';
+                    this.connectionStatus.textContent = 'En attente';
+                    this.connectionStatus.className = 'connection-status waiting';
+                    
+                    // Simulation d'une connexion après 3 secondes
+                    setTimeout(() => {
+                        this.simulateConnection();
+                    }, 3000);
+
+                } catch (error) {
+                    this.status.textContent = 'Erreur Bluetooth: ' + error.message;
+                }
+            }
+
+            async startClient() {
+                this.status.textContent = 'Recherche d\'appareils...';
+
+                if (!navigator.bluetooth) {
+                    this.status.textContent = 'Bluetooth non supporté sur ce navigateur';
+                    return;
+                }
+
+                try {
+                    // Recherche d'appareils Bluetooth
+                    this.device = await navigator.bluetooth.requestDevice({
+                        acceptAllDevices: true,
+                        optionalServices: [this.serviceUUID]
+                    });
+
+                    this.status.textContent = 'Connexion à ' + this.device.name + '...';
+
+                    const server = await this.device.gatt.connect();
+                    
+                    // Pour la démo, on simule une connexion réussie
+                    this.simulateConnection();
+
+                } catch (error) {
+                    this.status.textContent = 'Connexion annulée ou échouée';
+                }
+            }
+
+            startSolo() {
+                this.soloMode = true;
+                this.simulateConnection();
+            }
+
+            simulateConnection() {
+                this.isConnected = true;
+                this.connectionStatus.textContent = this.soloMode ? 'Mode Solo' : 'Connecté';
+                this.connectionStatus.className = 'connection-status connected';
+                this.startGame();
+            }
+
+            startGame() {
+                this.menu.style.display = 'none';
+                this.score.style.display = 'block';
+                this.controls.style.display = 'flex';
+                this.gameRunning = true;
+
+                // Reset du jeu
+                this.gameState.ball.x = this.canvas.width / 2;
+                this.gameState.ball.y = this.canvas.height / 2;
+                this.gameState.ball.dx = (Math.random() > 0.5 ? 1 : -1) * 3;
+                this.gameState.ball.dy = (Math.random() > 0.5 ? 1 : -1) * 3;
+                
+                this.gameState.player1.x = this.canvas.width / 2 - 50;
+                this.gameState.player1.y = this.canvas.height - 30;
+                this.gameState.player2.x = this.canvas.width / 2 - 50;
+                this.gameState.player2.y = 20;
+
+                this.gameLoop();
+            }
+
+            gameLoop() {
+                if (!this.gameRunning) return;
+
+                const now = performance.now();
+                if (now - this.lastUpdate > 16) { // ~60 FPS
+                    this.update();
+                    this.render();
+                    this.lastUpdate = now;
+                }
+
+                requestAnimationFrame(() => this.gameLoop());
+            }
+
+            update() {
+                // Mouvement des raquettes
+                if (this.keys.left) {
+                    this.gameState.player1.x = Math.max(0, this.gameState.player1.x - 5);
+                }
+                if (this.keys.right) {
+                    this.gameState.player1.x = Math.min(this.canvas.width - this.gameState.player1.width, this.gameState.player1.x + 5);
+                }
+
+                // IA simple pour le joueur 2 en mode solo
+                if (this.soloMode) {
+                    const ballCenter = this.gameState.ball.x;
+                    const paddleCenter = this.gameState.player2.x + this.gameState.player2.width / 2;
+                    
+                    if (ballCenter < paddleCenter - 10) {
+                        this.gameState.player2.x = Math.max(0, this.gameState.player2.x - 3);
+                    } else if (ballCenter > paddleCenter + 10) {
+                        this.gameState.player2.x = Math.min(this.canvas.width - this.gameState.player2.width, this.gameState.player2.x + 3);
+                    }
+                }
+
+                // Mouvement de la balle
+                this.gameState.ball.x += this.gameState.ball.dx;
+                this.gameState.ball.y += this.gameState.ball.dy;
+
+                // Collision avec les murs
+                if (this.gameState.ball.x <= this.gameState.ball.radius || 
+                    this.gameState.ball.x >= this.canvas.width - this.gameState.ball.radius) {
+                    this.gameState.ball.dx = -this.gameState.ball.dx;
+                }
+
+                // Collision avec les raquettes
+                const ball = this.gameState.ball;
+                const p1 = this.gameState.player1;
+                const p2 = this.gameState.player2;
+
+                // Player 1 (bas)
+                if (ball.y + ball.radius >= p1.y && 
+                    ball.y - ball.radius <= p1.y + p1.height &&
+                    ball.x >= p1.x && ball.x <= p1.x + p1.width) {
+                    ball.dy = -Math.abs(ball.dy);
+                    
+                    // Effet selon la position sur la raquette
+                    const hitPos = (ball.x - p1.x) / p1.width;
+                    ball.dx = (hitPos - 0.5) * 6;
+                }
+
+                // Player 2 (haut)
+                if (ball.y - ball.radius <= p2.y + p2.height && 
+                    ball.y + ball.radius >= p2.y &&
+                    ball.x >= p2.x && ball.x <= p2.x + p2.width) {
+                    ball.dy = Math.abs(ball.dy);
+                    
+                    const hitPos = (ball.x - p2.x) / p2.width;
+                    ball.dx = (hitPos - 0.5) * 6;
+                }
+
+                // Score
+                if (ball.y < 0) {
+                    this.gameState.score1++;
+                    this.resetBall();
+                } else if (ball.y > this.canvas.height) {
+                    this.gameState.score2++;
+                    this.resetBall();
+                }
+
+                // Mise à jour du score
+                this.score.textContent = `${this.gameState.score1} - ${this.gameState.score2}`;
+
+                // Victoire
+                if (this.gameState.score1 >= 5 || this.gameState.score2 >= 5) {
+                    this.endGame();
+                }
+            }
+
+            resetBall() {
+                this.gameState.ball.x = this.canvas.width / 2;
+                this.gameState.ball.y = this.canvas.height / 2;
+                this.gameState.ball.dx = (Math.random() > 0.5 ? 1 : -1) * 3;
+                this.gameState.ball.dy = (Math.random() > 0.5 ? 1 : -1) * 3;
+            }
+
+            render() {
+                // Effacer le canvas
+                this.ctx.fillStyle = '#000';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // Ligne centrale
+                this.ctx.strokeStyle = '#fff';
+                this.ctx.setLineDash([10, 10]);
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, this.canvas.height / 2);
+                this.ctx.lineTo(this.canvas.width, this.canvas.height / 2);
+                this.ctx.stroke();
+                this.ctx.setLineDash([]);
+
+                // Raquettes
+                this.ctx.fillStyle = '#fff';
+                this.ctx.fillRect(this.gameState.player1.x, this.gameState.player1.y, 
+                                this.gameState.player1.width, this.gameState.player1.height);
+                this.ctx.fillRect(this.gameState.player2.x, this.gameState.player2.y, 
+                                this.gameState.player2.width, this.gameState.player2.height);
+
+                // Balle
+                this.ctx.beginPath();
+                this.ctx.arc(this.gameState.ball.x, this.gameState.ball.y, 
+                           this.gameState.ball.radius, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+
+            endGame() {
+                this.gameRunning = false;
+                const winner = this.gameState.score1 >= 5 ? 'Joueur 1' : 'Joueur 2';
+                
+                setTimeout(() => {
+                    alert(`${winner} gagne!`);
+                    this.resetGame();
+                }, 100);
+            }
+
+            resetGame() {
+                this.gameState.score1 = 0;
+                this.gameState.score2 = 0;
+                this.menu.style.display = 'flex';
+                this.score.style.display = 'none';
+                this.controls.style.display = 'none';
+                this.connectionStatus.textContent = 'Déconnecté';
+                this.connectionStatus.className = 'connection-status disconnected';
+                this.isConnected = false;
+                this.soloMode = false;
+            }
+
+            // Méthodes pour la communication Bluetooth (simulation)
+            sendGameState() {
+                if (this.isConnected && !this.soloMode) {
+                    // Ici on enverrait l'état du jeu via Bluetooth
+                    const data = JSON.stringify({
+                        type: 'gameState',
+                        ball: this.gameState.ball,
+                        player: this.isHost ? this.gameState.player1 : this.gameState.player2,
+                        score: [this.gameState.score1, this.gameState.score2]
+                    });
+                    console.log('Envoi:', data);
+                }
+            }
+
+            receiveGameState(data) {
+                // Ici on recevrait et traiterait les données Bluetooth
+                try {
+                    const gameData = JSON.parse(data);
+                    if (gameData.type === 'gameState') {
+                        // Mise à jour de l'état du jeu
+                        this.gameState.ball = gameData.ball;
+                        if (this.isHost) {
+                            this.gameState.player2 = gameData.player;
+                        } else {
+                            this.gameState.player1 = gameData.player;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Erreur parsing:', error);
+                }
+            }
+        }
+
+        // Démarrage du jeu
+        window.addEventListener('load', () => {
+            new BluetoothPong();
+        });
+
+        // Empêcher le zoom sur mobile
+        document.addEventListener('touchmove', function(event) {
+            if (event.scale !== 1) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function(event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+    </script>
+</body>
+</html>
