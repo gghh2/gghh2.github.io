@@ -185,6 +185,11 @@
             color: white;
         }
 
+        .firebase-status {
+            background: #3498db;
+            color: white;
+        }
+
         .player-info {
             position: absolute;
             top: 70px;
@@ -206,12 +211,12 @@
 <body>
     <div class="container">
         <div class="menu" id="menu">
-            <h1>🏓 Pong Multijoueur</h1>
+            <h1>🏓 Pong Firebase</h1>
             <button id="hostBtn">Créer une partie</button>
             <button id="joinBtn">Rejoindre une partie</button>
             
             <div class="room-input" id="roomInput">
-                <input type="text" id="roomCode" placeholder="Code de la partie" maxlength="4">
+                <input type="text" id="roomCode" placeholder="Code de la partie (4 chiffres)" maxlength="4">
                 <button id="joinRoomBtn">Rejoindre</button>
             </div>
             
@@ -219,11 +224,11 @@
                 Code: <span id="generatedCode"></span>
             </div>
             
-            <div class="status" id="status">Choisissez un mode de jeu</div>
+            <div class="status" id="status">Connexion à Firebase...</div>
         </div>
 
-        <div class="connection-status disconnected" id="connectionStatus">
-            Déconnecté
+        <div class="connection-status firebase-status" id="connectionStatus">
+            Initialisation...
         </div>
 
         <div class="score" id="score" style="display: none;">
@@ -242,8 +247,12 @@
         </div>
     </div>
 
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
     <script>
-        class MultiplayerPong {
+        class FirebasePong {
             constructor() {
                 this.canvas = document.getElementById('gameCanvas');
                 this.ctx = this.canvas.getContext('2d');
@@ -261,12 +270,8 @@
                 this.gameRunning = false;
                 this.roomCode = null;
                 this.playerId = null;
-                this.otherPlayer = null;
-
-                // Communication via BroadcastChannel (fonctionne si les deux joueurs sont sur le même appareil)
-                // ou via un simple système de polling avec un "serveur" simulé en mémoire partagée
-                this.channel = null;
-                this.connectionInterval = null;
+                this.database = null;
+                this.roomRef = null;
 
                 // État du jeu
                 this.gameState = {
@@ -280,26 +285,43 @@
 
                 this.keys = { left: false, right: false };
                 this.lastUpdate = 0;
-                this.lastSent = 0;
-
-                // Système de communication inter-appareils avec localStorage + polling
-                this.serverKey = 'pong_server_rooms';
-                this.heartbeatKey = 'pong_heartbeat';
 
                 this.setupCanvas();
-                this.setupEventListeners();
-                this.initializeServer();
+                this.initFirebase();
             }
 
-            initializeServer() {
-                // Utiliser localStorage pour partager entre appareils sur le même réseau/navigateur
-                // et ajouter un système de "heartbeat" pour détecter les autres joueurs
-                if (!localStorage.getItem(this.serverKey)) {
-                    localStorage.setItem(this.serverKey, JSON.stringify({}));
+            async initFirebase() {
+                try {
+                    // Configuration Firebase - VOTRE PROJET
+                    const firebaseConfig = {
+                        apiKey: "AIzaSyAhfke1KdXbdnJ1xnAGxE1QEqO4G6kYXkQ",
+                        authDomain: "pong-a6a18.firebaseapp.com",
+                        databaseURL: "https://pong-a6a18-default-rtdb.europe-west1.firebasedatabase.app",
+                        projectId: "pong-a6a18",
+                        storageBucket: "pong-a6a18.firebasestorage.app",
+                        messagingSenderId: "903616443165",
+                        appId: "1:903616443165:web:497443ba2dcc29cb4e27f4"
+                    };
+
+                    // Initialize Firebase
+                    firebase.initializeApp(firebaseConfig);
+                    this.database = firebase.database();
+
+                    this.connectionStatus.textContent = 'Firebase connecté';
+                    this.connectionStatus.className = 'connection-status connected';
+                    this.status.textContent = 'Choisissez un mode de jeu';
+                    
+                    this.setupEventListeners();
+
+                } catch (error) {
+                    console.error('Erreur Firebase:', error);
+                    this.connectionStatus.textContent = 'Erreur Firebase';
+                    this.connectionStatus.className = 'connection-status disconnected';
+                    this.status.textContent = 'Impossible de se connecter à Firebase. Mode local uniquement.';
+                    
+                    // Fallback vers un mode local simple
+                    this.setupEventListeners();
                 }
-                
-                // Nettoyer les anciennes parties (plus de 5 minutes)
-                this.cleanupOldRooms();
             }
 
             setupCanvas() {
@@ -353,61 +375,57 @@
 
                 // Nettoyer en quittant
                 window.addEventListener('beforeunload', () => {
-                    if (this.roomCode) {
+                    if (this.roomRef) {
                         this.leaveRoom();
                     }
                 });
-            }
-
-            cleanupOldRooms() {
-                const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
-                const now = Date.now();
-                const fiveMinutes = 5 * 60 * 1000;
-                
-                Object.keys(rooms).forEach(code => {
-                    if (now - rooms[code].created > fiveMinutes) {
-                        delete rooms[code];
-                    }
-                });
-                
-                localStorage.setItem(this.serverKey, JSON.stringify(rooms));
             }
 
             generateRoomCode() {
                 return Math.floor(1000 + Math.random() * 9000).toString();
             }
 
-            createRoom() {
+            async createRoom() {
+                if (!this.database) {
+                    this.status.textContent = 'Firebase non disponible';
+                    return;
+                }
+
                 this.roomCode = this.generateRoomCode();
                 this.playerId = 'player1_' + Math.random().toString(36).substr(2, 5);
                 this.isHost = true;
 
-                // Créer la room sur le "serveur"
-                const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
-                rooms[this.roomCode] = {
-                    host: this.playerId,
-                    players: [this.playerId],
-                    gameState: this.gameState,
-                    created: Date.now(),
-                    lastHeartbeat: Date.now()
-                };
-                localStorage.setItem(this.serverKey, JSON.stringify(rooms));
+                try {
+                    // Créer la room dans Firebase
+                    this.roomRef = this.database.ref('rooms/' + this.roomCode);
+                    
+                    await this.roomRef.set({
+                        host: this.playerId,
+                        players: [this.playerId],
+                        gameState: this.gameState,
+                        created: firebase.database.ServerValue.TIMESTAMP,
+                        status: 'waiting'
+                    });
 
-                // Afficher le code
-                document.getElementById('generatedCode').textContent = this.roomCode;
-                this.roomCodeDisplay.style.display = 'block';
-                document.getElementById('hostBtn').style.display = 'none';
-                document.getElementById('joinBtn').style.display = 'none';
+                    // Écouter les changements
+                    this.roomRef.on('value', (snapshot) => {
+                        this.handleRoomUpdate(snapshot.val());
+                    });
 
-                this.status.textContent = 'Partagez ce code avec l\'autre joueur !';
-                this.connectionStatus.textContent = 'En attente';
-                this.connectionStatus.className = 'connection-status waiting';
+                    // Afficher le code
+                    document.getElementById('generatedCode').textContent = this.roomCode;
+                    this.roomCodeDisplay.style.display = 'block';
+                    document.getElementById('hostBtn').style.display = 'none';
+                    document.getElementById('joinBtn').style.display = 'none';
 
-                // Envoyer des "heartbeats" pour signaler notre présence
-                this.startHeartbeat();
-                
-                // Vérifier les connexions
-                this.startConnectionPolling();
+                    this.status.textContent = 'Partagez ce code avec l\'autre joueur !';
+                    this.connectionStatus.textContent = 'En attente';
+                    this.connectionStatus.className = 'connection-status waiting';
+
+                } catch (error) {
+                    console.error('Erreur création room:', error);
+                    this.status.textContent = 'Erreur lors de la création de la partie';
+                }
             }
 
             showJoinInterface() {
@@ -418,91 +436,68 @@
                 document.getElementById('roomCode').focus();
             }
 
-            joinRoom() {
+            async joinRoom() {
+                if (!this.database) {
+                    this.status.textContent = 'Firebase non disponible';
+                    return;
+                }
+
                 const code = document.getElementById('roomCode').value.trim();
                 if (code.length !== 4) {
                     this.status.textContent = 'Le code doit contenir 4 chiffres';
                     return;
                 }
 
-                // Vérifier si la room existe
-                const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
-                console.log('Rooms disponibles:', Object.keys(rooms));
-                console.log('Code recherché:', code);
-                
-                if (!rooms[code]) {
-                    this.status.textContent = `Partie introuvable (Code: ${code})`;
-                    return;
-                }
-
-                if (rooms[code].players.length >= 2) {
-                    this.status.textContent = 'Partie complète';
-                    return;
-                }
-
-                this.roomCode = code;
-                this.playerId = 'player2_' + Math.random().toString(36).substr(2, 5);
-                this.isHost = false;
-
-                // Rejoindre la room
-                rooms[code].players.push(this.playerId);
-                rooms[code].lastActivity = Date.now();
-                localStorage.setItem(this.serverKey, JSON.stringify(rooms));
-
-                this.status.textContent = 'Connexion réussie ! Démarrage...';
-                this.connectionStatus.textContent = 'Connecté';
-                this.connectionStatus.className = 'connection-status connected';
-
-                // Envoyer des heartbeats
-                this.startHeartbeat();
-                this.startConnectionPolling();
-                
-                // Démarrer le jeu après un court délai
-                setTimeout(() => {
-                    this.startGame();
-                }, 1500);
-            }
-
-            startHeartbeat() {
-                // Envoyer un signal de vie toutes les 2 secondes
-                this.heartbeatInterval = setInterval(() => {
-                    const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
-                    if (rooms[this.roomCode]) {
-                        rooms[this.roomCode].lastHeartbeat = Date.now();
-                        if (this.isHost) {
-                            rooms[this.roomCode].hostHeartbeat = Date.now();
-                        } else {
-                            rooms[this.roomCode].clientHeartbeat = Date.now();
-                        }
-                        localStorage.setItem(this.serverKey, JSON.stringify(rooms));
+                try {
+                    this.roomCode = code;
+                    this.roomRef = this.database.ref('rooms/' + code);
+                    
+                    // Vérifier si la room existe
+                    const snapshot = await this.roomRef.once('value');
+                    const roomData = snapshot.val();
+                    
+                    if (!roomData) {
+                        this.status.textContent = `Partie introuvable (${code})`;
+                        return;
                     }
-                }, 2000);
-            }
 
-            startConnectionPolling() {
-                this.connectionInterval = setInterval(() => {
-                    this.checkConnection();
-                    if (this.gameRunning) {
-                        this.syncGameState();
+                    if (roomData.players && roomData.players.length >= 2) {
+                        this.status.textContent = 'Partie complète';
+                        return;
                     }
-                }, 100); // 10 fois par seconde
+
+                    this.playerId = 'player2_' + Math.random().toString(36).substr(2, 5);
+                    this.isHost = false;
+
+                    // Rejoindre la room
+                    await this.roomRef.update({
+                        players: [...roomData.players, this.playerId],
+                        status: 'playing'
+                    });
+
+                    // Écouter les changements
+                    this.roomRef.on('value', (snapshot) => {
+                        this.handleRoomUpdate(snapshot.val());
+                    });
+
+                    this.status.textContent = 'Connexion réussie ! Démarrage...';
+                    this.connectionStatus.textContent = 'Connecté';
+                    this.connectionStatus.className = 'connection-status connected';
+
+                } catch (error) {
+                    console.error('Erreur connexion room:', error);
+                    this.status.textContent = 'Erreur lors de la connexion';
+                }
             }
 
-            checkConnection() {
-                const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
-                if (!rooms[this.roomCode]) {
+            handleRoomUpdate(roomData) {
+                if (!roomData) {
                     this.handleDisconnection();
                     return;
                 }
 
-                const room = rooms[this.roomCode];
-                
-                // Vérifier si l'autre joueur est toujours là (heartbeat dans les 10 dernières secondes)
-                const now = Date.now();
-                const tenSeconds = 10 * 1000;
-                
-                if (this.isHost && room.players.length === 2 && !this.gameRunning) {
-                    // L'autre joueur s'est connecté !
+                // Si on est l'hôte et que le 2e joueur s'est connecté
+                if (this.isHost && roomData.players && roomData.players.length === 2 && !this.gameRunning) {
                     this.status.textContent = 'Joueur connecté ! Lancement du jeu...';
                     this.connectionStatus.textContent = 'Connecté';
                     this.connectionStatus.className = 'connection-status connected';
@@ -511,53 +506,33 @@
                         this.startGame();
                     }, 1500);
                 }
-                
-                // Vérifier la déconnexion de l'autre joueur
-                if (this.gameRunning) {
-                    if (this.isHost && room.clientHeartbeat && now - room.clientHeartbeat > tenSeconds) {
-                        this.status.textContent = 'L\'autre joueur s\'est déconnecté';
-                        this.handleDisconnection();
-                    } else if (!this.isHost && room.hostHeartbeat && now - room.hostHeartbeat > tenSeconds) {
-                        this.status.textContent = 'L\'hôte s\'est déconnecté';
-                        this.handleDisconnection();
+
+                // Synchroniser l'état du jeu
+                if (this.gameRunning && roomData.gameState) {
+                    if (!this.isHost) {
+                        // Le client reçoit l'état du jeu de l'hôte
+                        const myPaddleX = this.gameState.player2.x;
+                        this.gameState = { ...roomData.gameState };
+                        this.gameState.player2.x = myPaddleX; // Garder le contrôle de sa raquette
+                    }
+
+                    // Mettre à jour les positions des raquettes
+                    if (roomData.player1Position !== undefined) {
+                        this.gameState.player1.x = roomData.player1Position;
+                    }
+                    if (roomData.player2Position !== undefined) {
+                        this.gameState.player2.x = roomData.player2Position;
                     }
                 }
             }
 
-            syncGameState() {
-                const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
-                if (!rooms[this.roomCode]) return;
-
-                const room = rooms[this.roomCode];
-
-                if (this.isHost) {
-                    // L'hôte envoie l'état du jeu
-                    room.gameState = { ...this.gameState };
-                    room.gameState.lastUpdate = Date.now();
-                    localStorage.setItem(this.serverKey, JSON.stringify(rooms));
-                } else {
-                    // Le client reçoit l'état du jeu
-                    if (room.gameState && room.gameState.lastUpdate > this.gameState.lastUpdate) {
-                        // Garder le contrôle de sa raquette
-                        const myPaddleX = this.gameState.player2.x;
-                        this.gameState = { ...room.gameState };
-                        this.gameState.player2.x = myPaddleX;
+            async updateFirebase(data) {
+                if (this.roomRef) {
+                    try {
+                        await this.roomRef.update(data);
+                    } catch (error) {
+                        console.error('Erreur mise à jour Firebase:', error);
                     }
-                }
-
-                // Envoyer la position de sa raquette
-                if (this.isHost) {
-                    room.player1Position = this.gameState.player1.x;
-                } else {
-                    room.player2Position = this.gameState.player2.x;
-                }
-                localStorage.setItem(this.serverKey, JSON.stringify(rooms));
-
-                // Recevoir la position de l'autre joueur
-                if (this.isHost && room.player2Position !== undefined) {
-                    this.gameState.player2.x = room.player2Position;
-                } else if (!this.isHost && room.player1Position !== undefined) {
-                    this.gameState.player1.x = room.player1Position;
                 }
             }
 
@@ -609,9 +584,23 @@
                     myPaddle.x = Math.min(this.canvas.width - myPaddle.width, myPaddle.x + 5);
                 }
 
+                // Envoyer la position de sa raquette
+                const paddleData = {};
+                if (this.isHost) {
+                    paddleData.player1Position = this.gameState.player1.x;
+                } else {
+                    paddleData.player2Position = this.gameState.player2.x;
+                }
+                this.updateFirebase(paddleData);
+
                 // Seul l'hôte calcule la physique de la balle
                 if (this.isHost) {
                     this.updateBallPhysics();
+                    
+                    // Envoyer l'état du jeu
+                    this.updateFirebase({
+                        gameState: this.gameState
+                    });
                 }
 
                 // Mise à jour du score
@@ -722,35 +711,36 @@
                 this.connectionStatus.textContent = 'Déconnecté';
                 this.connectionStatus.className = 'connection-status disconnected';
                 
-                clearInterval(this.connectionInterval);
-                clearInterval(this.heartbeatInterval);
+                if (this.roomRef) {
+                    this.roomRef.off();
+                }
+                
                 this.resetGame();
                 this.status.textContent = 'Connexion perdue. Créez une nouvelle partie.';
             }
 
-            leaveRoom() {
-                if (!this.roomCode) return;
-
-                const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
-                if (rooms[this.roomCode]) {
-                    if (this.isHost) {
-                        // L'hôte supprime la room
-                        delete rooms[this.roomCode];
-                    } else {
-                        // Le client se retire
-                        rooms[this.roomCode].players = rooms[this.roomCode].players.filter(
-                            p => p !== this.playerId
-                        );
+            async leaveRoom() {
+                if (this.roomRef) {
+                    try {
+                        if (this.isHost) {
+                            // L'hôte supprime la room
+                            await this.roomRef.remove();
+                        } else {
+                            // Le client se retire (on pourrait gérer ça mieux)
+                            await this.roomRef.update({
+                                status: 'disconnected'
+                            });
+                        }
+                        this.roomRef.off();
+                    } catch (error) {
+                        console.error('Erreur lors de la sortie:', error);
                     }
-                    localStorage.setItem(this.serverKey, JSON.stringify(rooms));
                 }
             }
 
             resetGame() {
                 this.leaveRoom();
                 
-                clearInterval(this.connectionInterval);
-                clearInterval(this.heartbeatInterval);
                 this.gameState.score1 = 0;
                 this.gameState.score2 = 0;
                 this.menu.style.display = 'flex';
@@ -766,19 +756,20 @@
                 document.getElementById('roomCode').value = '';
                 
                 this.status.textContent = 'Choisissez un mode de jeu';
-                this.connectionStatus.textContent = 'Déconnecté';
-                this.connectionStatus.className = 'connection-status disconnected';
+                this.connectionStatus.textContent = 'Firebase connecté';
+                this.connectionStatus.className = 'connection-status connected';
                 
                 this.isConnected = false;
                 this.roomCode = null;
                 this.playerId = null;
                 this.isHost = false;
+                this.roomRef = null;
             }
         }
 
         // Démarrage du jeu
         window.addEventListener('load', () => {
-            new MultiplayerPong();
+            new FirebasePong();
         });
 
         // Empêcher le zoom sur mobile
