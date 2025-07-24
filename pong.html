@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pong Bluetooth</title>
+    <title>Pong Multijoueur</title>
     <style>
         * {
             margin: 0;
@@ -75,6 +75,35 @@
             background: #666;
             cursor: not-allowed;
             transform: none;
+        }
+
+        .room-input {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+
+        .room-input input {
+            padding: 10px;
+            margin: 10px;
+            border: none;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 16px;
+            width: 200px;
+        }
+
+        .room-code {
+            color: #4CAF50;
+            font-size: 1.5em;
+            font-weight: bold;
+            margin: 20px;
+            text-align: center;
+            background: rgba(76, 175, 80, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #4CAF50;
         }
 
         .status {
@@ -156,13 +185,13 @@
             color: white;
         }
 
-        .host-info {
-            background: rgba(52, 152, 219, 0.9);
-            color: white;
-            padding: 10px;
-            margin: 10px;
-            border-radius: 8px;
-            font-size: 12px;
+        .player-info {
+            position: absolute;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-size: 14px;
             text-align: center;
         }
 
@@ -177,13 +206,20 @@
 <body>
     <div class="container">
         <div class="menu" id="menu">
-            <h1>🏓 Pong Bluetooth</h1>
-            <button id="hostBtn">Créer une partie (Hôte)</button>
+            <h1>🏓 Pong Multijoueur</h1>
+            <button id="hostBtn">Créer une partie</button>
             <button id="joinBtn">Rejoindre une partie</button>
-            <div class="status" id="status">Choisissez un mode de jeu</div>
-            <div class="host-info" id="hostInfo" style="display: none;">
-                En tant qu'hôte, votre appareil doit être visible dans les paramètres Bluetooth
+            
+            <div class="room-input" id="roomInput">
+                <input type="text" id="roomCode" placeholder="Code de la partie" maxlength="4">
+                <button id="joinRoomBtn">Rejoindre</button>
             </div>
+            
+            <div class="room-code" id="roomCodeDisplay" style="display: none;">
+                Code: <span id="generatedCode"></span>
+            </div>
+            
+            <div class="status" id="status">Choisissez un mode de jeu</div>
         </div>
 
         <div class="connection-status disconnected" id="connectionStatus">
@@ -192,6 +228,10 @@
 
         <div class="score" id="score" style="display: none;">
             0 - 0
+        </div>
+
+        <div class="player-info" id="playerInfo" style="display: none;">
+            Vous êtes le Joueur 1
         </div>
 
         <canvas class="game-canvas" id="gameCanvas"></canvas>
@@ -203,7 +243,7 @@
     </div>
 
     <script>
-        class BluetoothPong {
+        class MultiplayerPong {
             constructor() {
                 this.canvas = document.getElementById('gameCanvas');
                 this.ctx = this.canvas.getContext('2d');
@@ -212,20 +252,21 @@
                 this.score = document.getElementById('score');
                 this.controls = document.getElementById('controls');
                 this.connectionStatus = document.getElementById('connectionStatus');
-                this.hostInfo = document.getElementById('hostInfo');
+                this.playerInfo = document.getElementById('playerInfo');
+                this.roomInput = document.getElementById('roomInput');
+                this.roomCodeDisplay = document.getElementById('roomCodeDisplay');
 
                 this.isHost = false;
                 this.isConnected = false;
-                this.device = null;
-                this.server = null;
-                this.service = null;
-                this.characteristic = null;
                 this.gameRunning = false;
+                this.roomCode = null;
+                this.playerId = null;
+                this.otherPlayer = null;
 
-                // UUID pour le service Pong
-                this.serviceUUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e'; // Service UART Nordic
-                this.txCharacteristicUUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // TX
-                this.rxCharacteristicUUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // RX
+                // Communication via BroadcastChannel (fonctionne si les deux joueurs sont sur le même appareil)
+                // ou via un simple système de polling avec un "serveur" simulé en mémoire partagée
+                this.channel = null;
+                this.connectionInterval = null;
 
                 // État du jeu
                 this.gameState = {
@@ -233,15 +274,27 @@
                     player1: { x: 150, y: 550, width: 100, height: 10 },
                     player2: { x: 150, y: 50, width: 100, height: 10 },
                     score1: 0,
-                    score2: 0
+                    score2: 0,
+                    lastUpdate: Date.now()
                 };
 
                 this.keys = { left: false, right: false };
                 this.lastUpdate = 0;
                 this.lastSent = 0;
 
+                // "Serveur" simple avec sessionStorage
+                this.serverKey = 'pong_server_rooms';
+
                 this.setupCanvas();
                 this.setupEventListeners();
+                this.initializeServer();
+            }
+
+            initializeServer() {
+                // Initialiser le "serveur" s'il n'existe pas
+                if (!sessionStorage.getItem(this.serverKey)) {
+                    sessionStorage.setItem(this.serverKey, JSON.stringify({}));
+                }
             }
 
             setupCanvas() {
@@ -256,8 +309,9 @@
             }
 
             setupEventListeners() {
-                document.getElementById('hostBtn').addEventListener('click', () => this.startHost());
-                document.getElementById('joinBtn').addEventListener('click', () => this.startClient());
+                document.getElementById('hostBtn').addEventListener('click', () => this.createRoom());
+                document.getElementById('joinBtn').addEventListener('click', () => this.showJoinInterface());
+                document.getElementById('joinRoomBtn').addEventListener('click', () => this.joinRoom());
 
                 // Contrôles tactiles
                 document.getElementById('leftBtn').addEventListener('touchstart', (e) => {
@@ -278,158 +332,184 @@
                     this.keys.right = false;
                 });
 
-                // Contrôles clavier pour test
+                // Contrôles clavier
                 window.addEventListener('keydown', (e) => {
                     if (e.key === 'ArrowLeft') this.keys.left = true;
                     if (e.key === 'ArrowRight') this.keys.right = true;
+                    if (e.key === 'Enter' && this.roomInput.style.display !== 'none') {
+                        this.joinRoom();
+                    }
                 });
 
                 window.addEventListener('keyup', (e) => {
                     if (e.key === 'ArrowLeft') this.keys.left = false;
                     if (e.key === 'ArrowRight') this.keys.right = false;
                 });
+
+                // Nettoyer en quittant
+                window.addEventListener('beforeunload', () => {
+                    if (this.roomCode) {
+                        this.leaveRoom();
+                    }
+                });
             }
 
-            async startHost() {
+            generateRoomCode() {
+                return Math.floor(1000 + Math.random() * 9000).toString();
+            }
+
+            createRoom() {
+                this.roomCode = this.generateRoomCode();
+                this.playerId = 'player1';
                 this.isHost = true;
-                this.status.textContent = 'Mode hôte activé. Attendez qu\'un joueur se connecte...';
-                this.hostInfo.style.display = 'block';
+
+                // Créer la room sur le "serveur"
+                const rooms = JSON.parse(sessionStorage.getItem(this.serverKey));
+                rooms[this.roomCode] = {
+                    host: this.playerId,
+                    players: [this.playerId],
+                    gameState: this.gameState,
+                    created: Date.now()
+                };
+                sessionStorage.setItem(this.serverKey, JSON.stringify(rooms));
+
+                // Afficher le code
+                document.getElementById('generatedCode').textContent = this.roomCode;
+                this.roomCodeDisplay.style.display = 'block';
+                document.getElementById('hostBtn').style.display = 'none';
+                document.getElementById('joinBtn').style.display = 'none';
+
+                this.status.textContent = 'En attente d\'un autre joueur...';
                 this.connectionStatus.textContent = 'En attente';
                 this.connectionStatus.className = 'connection-status waiting';
 
-                // En mode hôte, on attend juste les connexions
-                // L'autre joueur doit nous trouver via "Rejoindre une partie"
-                console.log('Mode hôte activé - en attente de connexion');
+                // Vérifier les connexions
+                this.startConnectionPolling();
             }
 
-            async startClient() {
-                this.status.textContent = 'Recherche d\'appareils Bluetooth...';
+            showJoinInterface() {
+                this.roomInput.style.display = 'flex';
+                document.getElementById('hostBtn').style.display = 'none';
+                document.getElementById('joinBtn').style.display = 'none';
+                this.status.textContent = 'Entrez le code de la partie';
+                document.getElementById('roomCode').focus();
+            }
 
-                if (!navigator.bluetooth) {
-                    this.status.textContent = 'Web Bluetooth non supporté sur ce navigateur/appareil';
+            joinRoom() {
+                const code = document.getElementById('roomCode').value.trim();
+                if (code.length !== 4) {
+                    this.status.textContent = 'Le code doit contenir 4 chiffres';
                     return;
                 }
 
-                try {
-                    console.log('Recherche d\'appareils...');
-                    
-                    // Recherche d'appareils Bluetooth
-                    this.device = await navigator.bluetooth.requestDevice({
-                        acceptAllDevices: true,
-                        optionalServices: [this.serviceUUID]
-                    });
-
-                    console.log('Appareil sélectionné:', this.device.name || 'Sans nom');
-                    this.status.textContent = `Connexion à ${this.device.name || 'l\'appareil'}...`;
-
-                    // Gérer la déconnexion
-                    this.device.addEventListener('gattserverdisconnected', () => {
-                        console.log('Appareil déconnecté');
-                        this.handleDisconnection();
-                    });
-
-                    // Connexion GATT
-                    console.log('Connexion GATT...');
-                    this.server = await this.device.gatt.connect();
-                    
-                    try {
-                        // Tentative de connexion au service UART
-                        console.log('Recherche du service...');
-                        this.service = await this.server.getPrimaryService(this.serviceUUID);
-                        
-                        console.log('Recherche des caractéristiques...');
-                        this.characteristic = await this.service.getCharacteristic(this.rxCharacteristicUUID);
-                        
-                        // Écouter les notifications
-                        await this.characteristic.startNotifications();
-                        this.characteristic.addEventListener('characteristicvaluechanged', (event) => {
-                            this.handleBluetoothData(event);
-                        });
-
-                        console.log('Connexion Bluetooth établie!');
-                        this.handleConnection();
-                        
-                    } catch (serviceError) {
-                        console.log('Service UART non trouvé, connexion basique établie');
-                        // Même sans le service spécifique, on peut commencer le jeu
-                        this.handleConnection();
-                    }
-
-                } catch (error) {
-                    console.error('Erreur Bluetooth:', error);
-                    
-                    if (error.name === 'NotFoundError') {
-                        this.status.textContent = 'Aucun appareil sélectionné';
-                    } else if (error.name === 'SecurityError') {
-                        this.status.textContent = 'Erreur de sécurité - vérifiez que le site est en HTTPS';
-                    } else if (error.name === 'NetworkError') {
-                        this.status.textContent = 'Impossible de se connecter à l\'appareil';
-                    } else {
-                        this.status.textContent = `Erreur: ${error.message}`;
-                    }
+                // Vérifier si la room existe
+                const rooms = JSON.parse(sessionStorage.getItem(this.serverKey));
+                if (!rooms[code]) {
+                    this.status.textContent = 'Partie introuvable';
+                    return;
                 }
-            }
 
-            handleConnection() {
-                this.isConnected = true;
-                this.connectionStatus.textContent = 'Connecté via Bluetooth';
+                if (rooms[code].players.length >= 2) {
+                    this.status.textContent = 'Partie complète';
+                    return;
+                }
+
+                this.roomCode = code;
+                this.playerId = 'player2';
+                this.isHost = false;
+
+                // Rejoindre la room
+                rooms[code].players.push(this.playerId);
+                sessionStorage.setItem(this.serverKey, JSON.stringify(rooms));
+
+                this.status.textContent = 'Connexion réussie !';
+                this.connectionStatus.textContent = 'Connecté';
                 this.connectionStatus.className = 'connection-status connected';
-                this.status.textContent = 'Connexion établie! Lancement du jeu...';
+
+                this.startConnectionPolling();
                 
+                // Démarrer le jeu après un court délai
                 setTimeout(() => {
                     this.startGame();
                 }, 1000);
             }
 
-            handleDisconnection() {
-                this.isConnected = false;
-                this.gameRunning = false;
-                this.connectionStatus.textContent = 'Déconnecté';
-                this.connectionStatus.className = 'connection-status disconnected';
-                
-                // Retour au menu
-                this.resetGame();
-                this.status.textContent = 'Connexion perdue. Reconnectez-vous pour rejouer.';
+            startConnectionPolling() {
+                this.connectionInterval = setInterval(() => {
+                    this.checkConnection();
+                    if (this.gameRunning) {
+                        this.syncGameState();
+                    }
+                }, 100); // 10 fois par seconde
             }
 
-            handleBluetoothData(event) {
-                try {
-                    const value = event.target.value;
-                    const decoder = new TextDecoder();
-                    const data = decoder.decode(value);
+            checkConnection() {
+                const rooms = JSON.parse(sessionStorage.getItem(this.serverKey));
+                if (!rooms[this.roomCode]) {
+                    this.handleDisconnection();
+                    return;
+                }
+
+                const room = rooms[this.roomCode];
+                
+                if (this.isHost && room.players.length === 2 && !this.gameRunning) {
+                    // L'autre joueur s'est connecté !
+                    this.status.textContent = 'Joueur connecté ! Lancement du jeu...';
+                    this.connectionStatus.textContent = 'Connecté';
+                    this.connectionStatus.className = 'connection-status connected';
                     
-                    console.log('Données reçues:', data);
-                    
-                    const gameData = JSON.parse(data);
-                    this.receiveGameState(gameData);
-                    
-                } catch (error) {
-                    console.error('Erreur parsing données Bluetooth:', error);
+                    setTimeout(() => {
+                        this.startGame();
+                    }, 1000);
                 }
             }
 
-            async sendBluetoothData(data) {
-                if (!this.isConnected || !this.service) return;
+            syncGameState() {
+                const rooms = JSON.parse(sessionStorage.getItem(this.serverKey));
+                if (!rooms[this.roomCode]) return;
 
-                try {
-                    const txCharacteristic = await this.service.getCharacteristic(this.txCharacteristicUUID);
-                    const encoder = new TextEncoder();
-                    const dataArray = encoder.encode(JSON.stringify(data));
-                    
-                    await txCharacteristic.writeValue(dataArray);
-                    console.log('Données envoyées:', data);
-                    
-                } catch (error) {
-                    console.error('Erreur envoi Bluetooth:', error);
+                const room = rooms[this.roomCode];
+
+                if (this.isHost) {
+                    // L'hôte envoie l'état du jeu
+                    room.gameState = { ...this.gameState };
+                    room.gameState.lastUpdate = Date.now();
+                    sessionStorage.setItem(this.serverKey, JSON.stringify(rooms));
+                } else {
+                    // Le client reçoit l'état du jeu
+                    if (room.gameState && room.gameState.lastUpdate > this.gameState.lastUpdate) {
+                        // Garder le contrôle de sa raquette
+                        const myPaddleX = this.gameState.player2.x;
+                        this.gameState = { ...room.gameState };
+                        this.gameState.player2.x = myPaddleX;
+                    }
+                }
+
+                // Envoyer la position de sa raquette
+                if (this.isHost) {
+                    room.player1Position = this.gameState.player1.x;
+                } else {
+                    room.player2Position = this.gameState.player2.x;
+                }
+                sessionStorage.setItem(this.serverKey, JSON.stringify(rooms));
+
+                // Recevoir la position de l'autre joueur
+                if (this.isHost && room.player2Position !== undefined) {
+                    this.gameState.player2.x = room.player2Position;
+                } else if (!this.isHost && room.player1Position !== undefined) {
+                    this.gameState.player1.x = room.player1Position;
                 }
             }
 
             startGame() {
                 this.menu.style.display = 'none';
-                this.hostInfo.style.display = 'none';
                 this.score.style.display = 'block';
                 this.controls.style.display = 'flex';
+                this.playerInfo.style.display = 'block';
                 this.gameRunning = true;
+
+                // Afficher quel joueur on est
+                this.playerInfo.textContent = `Vous êtes le Joueur ${this.isHost ? '1 (bas)' : '2 (haut)'}`;
 
                 // Reset du jeu
                 this.gameState.ball.x = this.canvas.width / 2;
@@ -455,17 +535,11 @@
                     this.lastUpdate = now;
                 }
 
-                // Envoyer l'état du jeu via Bluetooth (limité à 10 fois par seconde)
-                if (now - this.lastSent > 100 && this.isConnected) {
-                    this.sendGameState();
-                    this.lastSent = now;
-                }
-
                 requestAnimationFrame(() => this.gameLoop());
             }
 
             update() {
-                // Mouvement des raquettes (seul le joueur local bouge sa raquette)
+                // Mouvement de sa raquette
                 const myPaddle = this.isHost ? this.gameState.player1 : this.gameState.player2;
                 
                 if (this.keys.left) {
@@ -557,49 +631,20 @@
                 this.ctx.setLineDash([]);
 
                 // Raquettes
-                this.ctx.fillStyle = '#fff';
+                this.ctx.fillStyle = this.isHost ? '#4CAF50' : '#fff';
                 this.ctx.fillRect(this.gameState.player1.x, this.gameState.player1.y, 
                                 this.gameState.player1.width, this.gameState.player1.height);
+                
+                this.ctx.fillStyle = this.isHost ? '#fff' : '#4CAF50';
                 this.ctx.fillRect(this.gameState.player2.x, this.gameState.player2.y, 
                                 this.gameState.player2.width, this.gameState.player2.height);
 
                 // Balle
+                this.ctx.fillStyle = '#fff';
                 this.ctx.beginPath();
                 this.ctx.arc(this.gameState.ball.x, this.gameState.ball.y, 
                            this.gameState.ball.radius, 0, Math.PI * 2);
                 this.ctx.fill();
-            }
-
-            sendGameState() {
-                if (!this.isConnected) return;
-
-                const data = {
-                    type: 'gameState',
-                    ball: this.gameState.ball,
-                    player1: this.gameState.player1,
-                    player2: this.gameState.player2,
-                    score1: this.gameState.score1,
-                    score2: this.gameState.score2,
-                    isHost: this.isHost
-                };
-
-                this.sendBluetoothData(data);
-            }
-
-            receiveGameState(data) {
-                if (data.type === 'gameState') {
-                    // Mettre à jour l'état du jeu depuis l'autre joueur
-                    if (data.isHost && !this.isHost) {
-                        // Je suis client, j'accepte l'état de l'hôte
-                        this.gameState.ball = data.ball;
-                        this.gameState.score1 = data.score1;
-                        this.gameState.score2 = data.score2;
-                        // Je garde le contrôle de mon paddle (player2)
-                    } else if (!data.isHost && this.isHost) {
-                        // Je suis hôte, j'accepte la position du paddle client
-                        this.gameState.player2 = data.player2;
-                    }
-                }
             }
 
             endGame() {
@@ -612,25 +657,66 @@
                 }, 100);
             }
 
+            handleDisconnection() {
+                this.gameRunning = false;
+                this.connectionStatus.textContent = 'Déconnecté';
+                this.connectionStatus.className = 'connection-status disconnected';
+                
+                clearInterval(this.connectionInterval);
+                this.resetGame();
+                this.status.textContent = 'Connexion perdue. Créez une nouvelle partie.';
+            }
+
+            leaveRoom() {
+                if (!this.roomCode) return;
+
+                const rooms = JSON.parse(sessionStorage.getItem(this.serverKey));
+                if (rooms[this.roomCode]) {
+                    if (this.isHost) {
+                        // L'hôte supprime la room
+                        delete rooms[this.roomCode];
+                    } else {
+                        // Le client se retire
+                        rooms[this.roomCode].players = rooms[this.roomCode].players.filter(
+                            p => p !== this.playerId
+                        );
+                    }
+                    sessionStorage.setItem(this.serverKey, JSON.stringify(rooms));
+                }
+            }
+
             resetGame() {
+                this.leaveRoom();
+                
+                clearInterval(this.connectionInterval);
                 this.gameState.score1 = 0;
                 this.gameState.score2 = 0;
                 this.menu.style.display = 'flex';
-                this.hostInfo.style.display = 'none';
                 this.score.style.display = 'none';
                 this.controls.style.display = 'none';
-                this.status.textContent = 'Choisissez un mode de jeu';
+                this.playerInfo.style.display = 'none';
+                this.roomInput.style.display = 'none';
+                this.roomCodeDisplay.style.display = 'none';
                 
-                if (!this.isConnected) {
-                    this.connectionStatus.textContent = 'Déconnecté';
-                    this.connectionStatus.className = 'connection-status disconnected';
-                }
+                // Réafficher les boutons
+                document.getElementById('hostBtn').style.display = 'block';
+                document.getElementById('joinBtn').style.display = 'block';
+                document.getElementById('roomCode').value = '';
+                
+                this.status.textContent = 'Choisissez un mode de jeu';
+                this.connectionStatus.textContent = 'Déconnecté';
+                this.connectionStatus.className = 'connection-status disconnected';
+                
+                this.isConnected = false;
+                this.roomCode = null;
+                this.playerId = null;
+                this.isHost = false;
             }
         }
 
         // Démarrage du jeu
         window.addEventListener('load', () => {
-            new BluetoothPong();
+            new MultiplayerPong();
         });
 
         // Empêcher le zoom sur mobile
