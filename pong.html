@@ -82,6 +82,7 @@
             margin: 20px;
             text-align: center;
             font-size: 14px;
+            max-width: 300px;
         }
 
         .game-canvas {
@@ -155,6 +156,16 @@
             color: white;
         }
 
+        .host-info {
+            background: rgba(52, 152, 219, 0.9);
+            color: white;
+            padding: 10px;
+            margin: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            text-align: center;
+        }
+
         @media (orientation: landscape) {
             .container {
                 max-width: 100%;
@@ -167,11 +178,12 @@
     <div class="container">
         <div class="menu" id="menu">
             <h1>🏓 Pong Bluetooth</h1>
-            <button id="hostBtn">Créer une partie</button>
+            <button id="hostBtn">Créer une partie (Hôte)</button>
             <button id="joinBtn">Rejoindre une partie</button>
-            <button id="simulationBtn" style="display: none;">Mode Simulation (2 onglets)</button>
-            <button id="soloBtn">Mode Solo (Test)</button>
             <div class="status" id="status">Choisissez un mode de jeu</div>
+            <div class="host-info" id="hostInfo" style="display: none;">
+                En tant qu'hôte, votre appareil doit être visible dans les paramètres Bluetooth
+            </div>
         </div>
 
         <div class="connection-status disconnected" id="connectionStatus">
@@ -200,13 +212,20 @@
                 this.score = document.getElementById('score');
                 this.controls = document.getElementById('controls');
                 this.connectionStatus = document.getElementById('connectionStatus');
+                this.hostInfo = document.getElementById('hostInfo');
 
                 this.isHost = false;
                 this.isConnected = false;
                 this.device = null;
+                this.server = null;
+                this.service = null;
                 this.characteristic = null;
                 this.gameRunning = false;
-                this.soloMode = false;
+
+                // UUID pour le service Pong
+                this.serviceUUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e'; // Service UART Nordic
+                this.txCharacteristicUUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // TX
+                this.rxCharacteristicUUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // RX
 
                 // État du jeu
                 this.gameState = {
@@ -219,10 +238,10 @@
 
                 this.keys = { left: false, right: false };
                 this.lastUpdate = 0;
+                this.lastSent = 0;
 
                 this.setupCanvas();
                 this.setupEventListeners();
-                this.setupBluetoothService();
             }
 
             setupCanvas() {
@@ -239,8 +258,6 @@
             setupEventListeners() {
                 document.getElementById('hostBtn').addEventListener('click', () => this.startHost());
                 document.getElementById('joinBtn').addEventListener('click', () => this.startClient());
-                document.getElementById('simulationBtn').addEventListener('click', () => this.startSimulation());
-                document.getElementById('soloBtn').addEventListener('click', () => this.startSolo());
 
                 // Contrôles tactiles
                 document.getElementById('leftBtn').addEventListener('touchstart', (e) => {
@@ -273,123 +290,143 @@
                 });
             }
 
-            setupBluetoothService() {
-                // UUID personnalisé pour le service Pong
-                this.serviceUUID = '12345678-1234-5678-9abc-123456789abc';
-                this.characteristicUUID = '87654321-4321-8765-cba9-987654321abc';
-            }
-
             async startHost() {
-                this.status.textContent = 'Démarrage du serveur Bluetooth...';
-                
-                if (!navigator.bluetooth) {
-                    this.status.innerHTML = 'Bluetooth non supporté.<br><small>Utilisez le mode simulation pour tester</small>';
-                    this.addSimulationButton();
-                    return;
-                }
+                this.isHost = true;
+                this.status.textContent = 'Mode hôte activé. Attendez qu\'un joueur se connecte...';
+                this.hostInfo.style.display = 'block';
+                this.connectionStatus.textContent = 'En attente';
+                this.connectionStatus.className = 'connection-status waiting';
 
-                try {
-                    // Note: L'API Web Bluetooth ne permet pas de créer un serveur directement
-                    // Cette partie simule la logique d'hébergement
-                    this.isHost = true;
-                    this.status.innerHTML = 'En attente de connexion...<br><small>L\'autre joueur doit cliquer "Rejoindre"</small>';
-                    this.connectionStatus.textContent = 'En attente';
-                    this.connectionStatus.className = 'connection-status waiting';
-                    
-                    // Afficher le bouton simulation comme alternative
-                    setTimeout(() => {
-                        this.addSimulationButton();
-                    }, 2000);
-
-                } catch (error) {
-                    this.status.textContent = 'Erreur Bluetooth: ' + error.message;
-                    this.addSimulationButton();
-                }
+                // En mode hôte, on attend juste les connexions
+                // L'autre joueur doit nous trouver via "Rejoindre une partie"
+                console.log('Mode hôte activé - en attente de connexion');
             }
 
             async startClient() {
-                this.status.textContent = 'Recherche d\'appareils...';
+                this.status.textContent = 'Recherche d\'appareils Bluetooth...';
 
                 if (!navigator.bluetooth) {
-                    this.status.textContent = 'Bluetooth non supporté sur ce navigateur';
+                    this.status.textContent = 'Web Bluetooth non supporté sur ce navigateur/appareil';
                     return;
                 }
 
                 try {
-                    // Recherche d'appareils avec filtres améliorés
+                    console.log('Recherche d\'appareils...');
+                    
+                    // Recherche d'appareils Bluetooth
                     this.device = await navigator.bluetooth.requestDevice({
-                        filters: [
-                            { namePrefix: 'Pong' },
-                            { namePrefix: 'Android' },
-                            { namePrefix: 'iPhone' },
-                            { namePrefix: 'Samsung' },
-                            { namePrefix: 'Pixel' }
-                        ],
-                        optionalServices: [this.serviceUUID, 'battery_service', 'device_information']
+                        acceptAllDevices: true,
+                        optionalServices: [this.serviceUUID]
                     });
 
-                    this.status.textContent = 'Connexion à ' + (this.device.name || 'Appareil') + '...';
+                    console.log('Appareil sélectionné:', this.device.name || 'Sans nom');
+                    this.status.textContent = `Connexion à ${this.device.name || 'l\'appareil'}...`;
 
-                    const server = await this.device.gatt.connect();
+                    // Gérer la déconnexion
+                    this.device.addEventListener('gattserverdisconnected', () => {
+                        console.log('Appareil déconnecté');
+                        this.handleDisconnection();
+                    });
+
+                    // Connexion GATT
+                    console.log('Connexion GATT...');
+                    this.server = await this.device.gatt.connect();
                     
-                    // Pour la démo, on simule une connexion réussie
-                    this.simulateConnection();
+                    try {
+                        // Tentative de connexion au service UART
+                        console.log('Recherche du service...');
+                        this.service = await this.server.getPrimaryService(this.serviceUUID);
+                        
+                        console.log('Recherche des caractéristiques...');
+                        this.characteristic = await this.service.getCharacteristic(this.rxCharacteristicUUID);
+                        
+                        // Écouter les notifications
+                        await this.characteristic.startNotifications();
+                        this.characteristic.addEventListener('characteristicvaluechanged', (event) => {
+                            this.handleBluetoothData(event);
+                        });
+
+                        console.log('Connexion Bluetooth établie!');
+                        this.handleConnection();
+                        
+                    } catch (serviceError) {
+                        console.log('Service UART non trouvé, connexion basique établie');
+                        // Même sans le service spécifique, on peut commencer le jeu
+                        this.handleConnection();
+                    }
 
                 } catch (error) {
+                    console.error('Erreur Bluetooth:', error);
+                    
                     if (error.name === 'NotFoundError') {
-                        this.status.innerHTML = 'Aucun appareil compatible trouvé.<br><small>Essayez le mode simulation ci-dessous</small>';
-                        this.addSimulationButton();
+                        this.status.textContent = 'Aucun appareil sélectionné';
+                    } else if (error.name === 'SecurityError') {
+                        this.status.textContent = 'Erreur de sécurité - vérifiez que le site est en HTTPS';
+                    } else if (error.name === 'NetworkError') {
+                        this.status.textContent = 'Impossible de se connecter à l\'appareil';
                     } else {
-                        this.status.textContent = 'Connexion annulée ou échouée: ' + error.message;
+                        this.status.textContent = `Erreur: ${error.message}`;
                     }
                 }
             }
 
-            addSimulationButton() {
-                const simBtn = document.getElementById('simulationBtn');
-                simBtn.style.display = 'block';
-            }
-
-            startSimulation() {
-                // Mode simulation avec localStorage pour communication entre onglets
-                this.simulationMode = true;
-                this.setupSimulationSync();
-                this.simulateConnection();
-            }
-
-            setupSimulationSync() {
-                // Écouter les changements localStorage pour la synchronisation
-                window.addEventListener('storage', (e) => {
-                    if (e.key === 'pong_game_state' && e.newValue) {
-                        const data = JSON.parse(e.newValue);
-                        if (data.sender !== this.playerId) {
-                            this.receiveGameState(data);
-                        }
-                    }
-                });
-
-                // ID unique pour chaque joueur
-                this.playerId = 'player_' + Math.random().toString(36).substr(2, 9);
-            }
-
-            startSolo() {
-                this.soloMode = true;
-                this.simulateConnection();
-            }
-
-            simulateConnection() {
+            handleConnection() {
                 this.isConnected = true;
-                let statusText = 'Connecté';
-                if (this.soloMode) statusText = 'Mode Solo';
-                if (this.simulationMode) statusText = 'Mode Simulation';
-                
-                this.connectionStatus.textContent = statusText;
+                this.connectionStatus.textContent = 'Connecté via Bluetooth';
                 this.connectionStatus.className = 'connection-status connected';
-                this.startGame();
+                this.status.textContent = 'Connexion établie! Lancement du jeu...';
+                
+                setTimeout(() => {
+                    this.startGame();
+                }, 1000);
+            }
+
+            handleDisconnection() {
+                this.isConnected = false;
+                this.gameRunning = false;
+                this.connectionStatus.textContent = 'Déconnecté';
+                this.connectionStatus.className = 'connection-status disconnected';
+                
+                // Retour au menu
+                this.resetGame();
+                this.status.textContent = 'Connexion perdue. Reconnectez-vous pour rejouer.';
+            }
+
+            handleBluetoothData(event) {
+                try {
+                    const value = event.target.value;
+                    const decoder = new TextDecoder();
+                    const data = decoder.decode(value);
+                    
+                    console.log('Données reçues:', data);
+                    
+                    const gameData = JSON.parse(data);
+                    this.receiveGameState(gameData);
+                    
+                } catch (error) {
+                    console.error('Erreur parsing données Bluetooth:', error);
+                }
+            }
+
+            async sendBluetoothData(data) {
+                if (!this.isConnected || !this.service) return;
+
+                try {
+                    const txCharacteristic = await this.service.getCharacteristic(this.txCharacteristicUUID);
+                    const encoder = new TextEncoder();
+                    const dataArray = encoder.encode(JSON.stringify(data));
+                    
+                    await txCharacteristic.writeValue(dataArray);
+                    console.log('Données envoyées:', data);
+                    
+                } catch (error) {
+                    console.error('Erreur envoi Bluetooth:', error);
+                }
             }
 
             startGame() {
                 this.menu.style.display = 'none';
+                this.hostInfo.style.display = 'none';
                 this.score.style.display = 'block';
                 this.controls.style.display = 'flex';
                 this.gameRunning = true;
@@ -418,30 +455,41 @@
                     this.lastUpdate = now;
                 }
 
+                // Envoyer l'état du jeu via Bluetooth (limité à 10 fois par seconde)
+                if (now - this.lastSent > 100 && this.isConnected) {
+                    this.sendGameState();
+                    this.lastSent = now;
+                }
+
                 requestAnimationFrame(() => this.gameLoop());
             }
 
             update() {
-                // Mouvement des raquettes
+                // Mouvement des raquettes (seul le joueur local bouge sa raquette)
+                const myPaddle = this.isHost ? this.gameState.player1 : this.gameState.player2;
+                
                 if (this.keys.left) {
-                    this.gameState.player1.x = Math.max(0, this.gameState.player1.x - 5);
+                    myPaddle.x = Math.max(0, myPaddle.x - 5);
                 }
                 if (this.keys.right) {
-                    this.gameState.player1.x = Math.min(this.canvas.width - this.gameState.player1.width, this.gameState.player1.x + 5);
+                    myPaddle.x = Math.min(this.canvas.width - myPaddle.width, myPaddle.x + 5);
                 }
 
-                // IA simple pour le joueur 2 en mode solo
-                if (this.soloMode) {
-                    const ballCenter = this.gameState.ball.x;
-                    const paddleCenter = this.gameState.player2.x + this.gameState.player2.width / 2;
-                    
-                    if (ballCenter < paddleCenter - 10) {
-                        this.gameState.player2.x = Math.max(0, this.gameState.player2.x - 3);
-                    } else if (ballCenter > paddleCenter + 10) {
-                        this.gameState.player2.x = Math.min(this.canvas.width - this.gameState.player2.width, this.gameState.player2.x + 3);
-                    }
+                // Seul l'hôte calcule la physique de la balle
+                if (this.isHost) {
+                    this.updateBallPhysics();
                 }
 
+                // Mise à jour du score
+                this.score.textContent = `${this.gameState.score1} - ${this.gameState.score2}`;
+
+                // Vérifier la victoire
+                if (this.gameState.score1 >= 5 || this.gameState.score2 >= 5) {
+                    this.endGame();
+                }
+            }
+
+            updateBallPhysics() {
                 // Mouvement de la balle
                 this.gameState.ball.x += this.gameState.ball.dx;
                 this.gameState.ball.y += this.gameState.ball.dy;
@@ -463,7 +511,6 @@
                     ball.x >= p1.x && ball.x <= p1.x + p1.width) {
                     ball.dy = -Math.abs(ball.dy);
                     
-                    // Effet selon la position sur la raquette
                     const hitPos = (ball.x - p1.x) / p1.width;
                     ball.dx = (hitPos - 0.5) * 6;
                 }
@@ -485,14 +532,6 @@
                 } else if (ball.y > this.canvas.height) {
                     this.gameState.score2++;
                     this.resetBall();
-                }
-
-                // Mise à jour du score
-                this.score.textContent = `${this.gameState.score1} - ${this.gameState.score2}`;
-
-                // Victoire
-                if (this.gameState.score1 >= 5 || this.gameState.score2 >= 5) {
-                    this.endGame();
                 }
             }
 
@@ -531,6 +570,38 @@
                 this.ctx.fill();
             }
 
+            sendGameState() {
+                if (!this.isConnected) return;
+
+                const data = {
+                    type: 'gameState',
+                    ball: this.gameState.ball,
+                    player1: this.gameState.player1,
+                    player2: this.gameState.player2,
+                    score1: this.gameState.score1,
+                    score2: this.gameState.score2,
+                    isHost: this.isHost
+                };
+
+                this.sendBluetoothData(data);
+            }
+
+            receiveGameState(data) {
+                if (data.type === 'gameState') {
+                    // Mettre à jour l'état du jeu depuis l'autre joueur
+                    if (data.isHost && !this.isHost) {
+                        // Je suis client, j'accepte l'état de l'hôte
+                        this.gameState.ball = data.ball;
+                        this.gameState.score1 = data.score1;
+                        this.gameState.score2 = data.score2;
+                        // Je garde le contrôle de mon paddle (player2)
+                    } else if (!data.isHost && this.isHost) {
+                        // Je suis hôte, j'accepte la position du paddle client
+                        this.gameState.player2 = data.player2;
+                    }
+                }
+            }
+
             endGame() {
                 this.gameRunning = false;
                 const winner = this.gameState.score1 >= 5 ? 'Joueur 1' : 'Joueur 2';
@@ -545,43 +616,14 @@
                 this.gameState.score1 = 0;
                 this.gameState.score2 = 0;
                 this.menu.style.display = 'flex';
+                this.hostInfo.style.display = 'none';
                 this.score.style.display = 'none';
                 this.controls.style.display = 'none';
-                this.connectionStatus.textContent = 'Déconnecté';
-                this.connectionStatus.className = 'connection-status disconnected';
-                this.isConnected = false;
-                this.soloMode = false;
-            }
-
-            // Méthodes pour la communication Bluetooth (simulation)
-            sendGameState() {
-                if (this.isConnected && !this.soloMode) {
-                    // Ici on enverrait l'état du jeu via Bluetooth
-                    const data = JSON.stringify({
-                        type: 'gameState',
-                        ball: this.gameState.ball,
-                        player: this.isHost ? this.gameState.player1 : this.gameState.player2,
-                        score: [this.gameState.score1, this.gameState.score2]
-                    });
-                    console.log('Envoi:', data);
-                }
-            }
-
-            receiveGameState(data) {
-                // Ici on recevrait et traiterait les données Bluetooth
-                try {
-                    const gameData = JSON.parse(data);
-                    if (gameData.type === 'gameState') {
-                        // Mise à jour de l'état du jeu
-                        this.gameState.ball = gameData.ball;
-                        if (this.isHost) {
-                            this.gameState.player2 = gameData.player;
-                        } else {
-                            this.gameState.player1 = gameData.player;
-                        }
-                    }
-                } catch (error) {
-                    console.error('Erreur parsing:', error);
+                this.status.textContent = 'Choisissez un mode de jeu';
+                
+                if (!this.isConnected) {
+                    this.connectionStatus.textContent = 'Déconnecté';
+                    this.connectionStatus.className = 'connection-status disconnected';
                 }
             }
         }
