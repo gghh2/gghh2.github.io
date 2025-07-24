@@ -469,20 +469,27 @@
                     this.playerId = 'player2_' + Math.random().toString(36).substr(2, 5);
                     this.isHost = false;
 
+                    // Écouter les changements AVANT de rejoindre
+                    this.roomRef.on('value', (snapshot) => {
+                        this.handleRoomUpdate(snapshot.val());
+                    });
+
                     // Rejoindre la room
                     await this.roomRef.update({
                         players: [...roomData.players, this.playerId],
                         status: 'playing'
                     });
 
-                    // Écouter les changements
-                    this.roomRef.on('value', (snapshot) => {
-                        this.handleRoomUpdate(snapshot.val());
-                    });
-
                     this.status.textContent = 'Connexion réussie ! Démarrage...';
                     this.connectionStatus.textContent = 'Connecté';
                     this.connectionStatus.className = 'connection-status connected';
+
+                    // Forcer le démarrage du jeu après un délai
+                    setTimeout(() => {
+                        if (!this.gameRunning) {
+                            this.startGame();
+                        }
+                    }, 2000);
 
                 } catch (error) {
                     console.error('Erreur connexion room:', error);
@@ -496,6 +503,8 @@
                     return;
                 }
 
+                console.log('Room update:', roomData);
+
                 // Si on est l'hôte et que le 2e joueur s'est connecté
                 if (this.isHost && roomData.players && roomData.players.length === 2 && !this.gameRunning) {
                     this.status.textContent = 'Joueur connecté ! Lancement du jeu...';
@@ -505,6 +514,14 @@
                     setTimeout(() => {
                         this.startGame();
                     }, 1500);
+                }
+
+                // Si on est client et que le statut est 'playing' mais qu'on ne joue pas encore
+                if (!this.isHost && roomData.status === 'playing' && !this.gameRunning) {
+                    console.log('Client devrait démarrer le jeu');
+                    setTimeout(() => {
+                        this.startGame();
+                    }, 1000);
                 }
 
                 // Synchroniser l'état du jeu
