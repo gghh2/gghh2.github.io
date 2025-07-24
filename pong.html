@@ -169,6 +169,7 @@
             <h1>🏓 Pong Bluetooth</h1>
             <button id="hostBtn">Créer une partie</button>
             <button id="joinBtn">Rejoindre une partie</button>
+            <button id="simulationBtn" style="display: none;">Mode Simulation (2 onglets)</button>
             <button id="soloBtn">Mode Solo (Test)</button>
             <div class="status" id="status">Choisissez un mode de jeu</div>
         </div>
@@ -238,6 +239,7 @@
             setupEventListeners() {
                 document.getElementById('hostBtn').addEventListener('click', () => this.startHost());
                 document.getElementById('joinBtn').addEventListener('click', () => this.startClient());
+                document.getElementById('simulationBtn').addEventListener('click', () => this.startSimulation());
                 document.getElementById('soloBtn').addEventListener('click', () => this.startSolo());
 
                 // Contrôles tactiles
@@ -281,7 +283,8 @@
                 this.status.textContent = 'Démarrage du serveur Bluetooth...';
                 
                 if (!navigator.bluetooth) {
-                    this.status.textContent = 'Bluetooth non supporté sur ce navigateur';
+                    this.status.innerHTML = 'Bluetooth non supporté.<br><small>Utilisez le mode simulation pour tester</small>';
+                    this.addSimulationButton();
                     return;
                 }
 
@@ -289,17 +292,18 @@
                     // Note: L'API Web Bluetooth ne permet pas de créer un serveur directement
                     // Cette partie simule la logique d'hébergement
                     this.isHost = true;
-                    this.status.textContent = 'En attente de connexion...';
+                    this.status.innerHTML = 'En attente de connexion...<br><small>L\'autre joueur doit cliquer "Rejoindre"</small>';
                     this.connectionStatus.textContent = 'En attente';
                     this.connectionStatus.className = 'connection-status waiting';
                     
-                    // Simulation d'une connexion après 3 secondes
+                    // Afficher le bouton simulation comme alternative
                     setTimeout(() => {
-                        this.simulateConnection();
-                    }, 3000);
+                        this.addSimulationButton();
+                    }, 2000);
 
                 } catch (error) {
                     this.status.textContent = 'Erreur Bluetooth: ' + error.message;
+                    this.addSimulationButton();
                 }
             }
 
@@ -312,13 +316,19 @@
                 }
 
                 try {
-                    // Recherche d'appareils Bluetooth
+                    // Recherche d'appareils avec filtres améliorés
                     this.device = await navigator.bluetooth.requestDevice({
-                        acceptAllDevices: true,
-                        optionalServices: [this.serviceUUID]
+                        filters: [
+                            { namePrefix: 'Pong' },
+                            { namePrefix: 'Android' },
+                            { namePrefix: 'iPhone' },
+                            { namePrefix: 'Samsung' },
+                            { namePrefix: 'Pixel' }
+                        ],
+                        optionalServices: [this.serviceUUID, 'battery_service', 'device_information']
                     });
 
-                    this.status.textContent = 'Connexion à ' + this.device.name + '...';
+                    this.status.textContent = 'Connexion à ' + (this.device.name || 'Appareil') + '...';
 
                     const server = await this.device.gatt.connect();
                     
@@ -326,8 +336,40 @@
                     this.simulateConnection();
 
                 } catch (error) {
-                    this.status.textContent = 'Connexion annulée ou échouée';
+                    if (error.name === 'NotFoundError') {
+                        this.status.innerHTML = 'Aucun appareil compatible trouvé.<br><small>Essayez le mode simulation ci-dessous</small>';
+                        this.addSimulationButton();
+                    } else {
+                        this.status.textContent = 'Connexion annulée ou échouée: ' + error.message;
+                    }
                 }
+            }
+
+            addSimulationButton() {
+                const simBtn = document.getElementById('simulationBtn');
+                simBtn.style.display = 'block';
+            }
+
+            startSimulation() {
+                // Mode simulation avec localStorage pour communication entre onglets
+                this.simulationMode = true;
+                this.setupSimulationSync();
+                this.simulateConnection();
+            }
+
+            setupSimulationSync() {
+                // Écouter les changements localStorage pour la synchronisation
+                window.addEventListener('storage', (e) => {
+                    if (e.key === 'pong_game_state' && e.newValue) {
+                        const data = JSON.parse(e.newValue);
+                        if (data.sender !== this.playerId) {
+                            this.receiveGameState(data);
+                        }
+                    }
+                });
+
+                // ID unique pour chaque joueur
+                this.playerId = 'player_' + Math.random().toString(36).substr(2, 9);
             }
 
             startSolo() {
@@ -337,7 +379,11 @@
 
             simulateConnection() {
                 this.isConnected = true;
-                this.connectionStatus.textContent = this.soloMode ? 'Mode Solo' : 'Connecté';
+                let statusText = 'Connecté';
+                if (this.soloMode) statusText = 'Mode Solo';
+                if (this.simulationMode) statusText = 'Mode Simulation';
+                
+                this.connectionStatus.textContent = statusText;
                 this.connectionStatus.className = 'connection-status connected';
                 this.startGame();
             }
