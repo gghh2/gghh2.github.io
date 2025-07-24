@@ -282,8 +282,9 @@
                 this.lastUpdate = 0;
                 this.lastSent = 0;
 
-                // "Serveur" simple avec sessionStorage
+                // Système de communication inter-appareils avec localStorage + polling
                 this.serverKey = 'pong_server_rooms';
+                this.heartbeatKey = 'pong_heartbeat';
 
                 this.setupCanvas();
                 this.setupEventListeners();
@@ -291,10 +292,14 @@
             }
 
             initializeServer() {
-                // Initialiser le "serveur" s'il n'existe pas
-                if (!sessionStorage.getItem(this.serverKey)) {
-                    sessionStorage.setItem(this.serverKey, JSON.stringify({}));
+                // Utiliser localStorage pour partager entre appareils sur le même réseau/navigateur
+                // et ajouter un système de "heartbeat" pour détecter les autres joueurs
+                if (!localStorage.getItem(this.serverKey)) {
+                    localStorage.setItem(this.serverKey, JSON.stringify({}));
                 }
+                
+                // Nettoyer les anciennes parties (plus de 5 minutes)
+                this.cleanupOldRooms();
             }
 
             setupCanvas() {
@@ -354,24 +359,39 @@
                 });
             }
 
+            cleanupOldRooms() {
+                const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
+                const now = Date.now();
+                const fiveMinutes = 5 * 60 * 1000;
+                
+                Object.keys(rooms).forEach(code => {
+                    if (now - rooms[code].created > fiveMinutes) {
+                        delete rooms[code];
+                    }
+                });
+                
+                localStorage.setItem(this.serverKey, JSON.stringify(rooms));
+            }
+
             generateRoomCode() {
                 return Math.floor(1000 + Math.random() * 9000).toString();
             }
 
             createRoom() {
                 this.roomCode = this.generateRoomCode();
-                this.playerId = 'player1';
+                this.playerId = 'player1_' + Math.random().toString(36).substr(2, 5);
                 this.isHost = true;
 
                 // Créer la room sur le "serveur"
-                const rooms = JSON.parse(sessionStorage.getItem(this.serverKey));
+                const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
                 rooms[this.roomCode] = {
                     host: this.playerId,
                     players: [this.playerId],
                     gameState: this.gameState,
-                    created: Date.now()
+                    created: Date.now(),
+                    lastHeartbeat: Date.now()
                 };
-                sessionStorage.setItem(this.serverKey, JSON.stringify(rooms));
+                localStorage.setItem(this.serverKey, JSON.stringify(rooms));
 
                 // Afficher le code
                 document.getElementById('generatedCode').textContent = this.roomCode;
@@ -379,10 +399,13 @@
                 document.getElementById('hostBtn').style.display = 'none';
                 document.getElementById('joinBtn').style.display = 'none';
 
-                this.status.textContent = 'En attente d\'un autre joueur...';
+                this.status.textContent = 'Partagez ce code avec l\'autre joueur !';
                 this.connectionStatus.textContent = 'En attente';
                 this.connectionStatus.className = 'connection-status waiting';
 
+                // Envoyer des "heartbeats" pour signaler notre présence
+                this.startHeartbeat();
+                
                 // Vérifier les connexions
                 this.startConnectionPolling();
             }
@@ -403,9 +426,12 @@
                 }
 
                 // Vérifier si la room existe
-                const rooms = JSON.parse(sessionStorage.getItem(this.serverKey));
+                const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
+                console.log('Rooms disponibles:', Object.keys(rooms));
+                console.log('Code recherché:', code);
+                
                 if (!rooms[code]) {
-                    this.status.textContent = 'Partie introuvable';
+                    this.status.textContent = `Partie introuvable (Code: ${code})`;
                     return;
                 }
 
@@ -415,23 +441,42 @@
                 }
 
                 this.roomCode = code;
-                this.playerId = 'player2';
+                this.playerId = 'player2_' + Math.random().toString(36).substr(2, 5);
                 this.isHost = false;
 
                 // Rejoindre la room
                 rooms[code].players.push(this.playerId);
-                sessionStorage.setItem(this.serverKey, JSON.stringify(rooms));
+                rooms[code].lastActivity = Date.now();
+                localStorage.setItem(this.serverKey, JSON.stringify(rooms));
 
-                this.status.textContent = 'Connexion réussie !';
+                this.status.textContent = 'Connexion réussie ! Démarrage...';
                 this.connectionStatus.textContent = 'Connecté';
                 this.connectionStatus.className = 'connection-status connected';
 
+                // Envoyer des heartbeats
+                this.startHeartbeat();
                 this.startConnectionPolling();
                 
                 // Démarrer le jeu après un court délai
                 setTimeout(() => {
                     this.startGame();
-                }, 1000);
+                }, 1500);
+            }
+
+            startHeartbeat() {
+                // Envoyer un signal de vie toutes les 2 secondes
+                this.heartbeatInterval = setInterval(() => {
+                    const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
+                    if (rooms[this.roomCode]) {
+                        rooms[this.roomCode].lastHeartbeat = Date.now();
+                        if (this.isHost) {
+                            rooms[this.roomCode].hostHeartbeat = Date.now();
+                        } else {
+                            rooms[this.roomCode].clientHeartbeat = Date.now();
+                        }
+                        localStorage.setItem(this.serverKey, JSON.stringify(rooms));
+                    }
+                }, 2000);
             }
 
             startConnectionPolling() {
@@ -444,13 +489,17 @@
             }
 
             checkConnection() {
-                const rooms = JSON.parse(sessionStorage.getItem(this.serverKey));
+                const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
                 if (!rooms[this.roomCode]) {
                     this.handleDisconnection();
                     return;
                 }
 
                 const room = rooms[this.roomCode];
+                
+                // Vérifier si l'autre joueur est toujours là (heartbeat dans les 10 dernières secondes)
+                const now = Date.now();
+                const tenSeconds = 10 * 1000;
                 
                 if (this.isHost && room.players.length === 2 && !this.gameRunning) {
                     // L'autre joueur s'est connecté !
@@ -460,12 +509,23 @@
                     
                     setTimeout(() => {
                         this.startGame();
-                    }, 1000);
+                    }, 1500);
+                }
+                
+                // Vérifier la déconnexion de l'autre joueur
+                if (this.gameRunning) {
+                    if (this.isHost && room.clientHeartbeat && now - room.clientHeartbeat > tenSeconds) {
+                        this.status.textContent = 'L\'autre joueur s\'est déconnecté';
+                        this.handleDisconnection();
+                    } else if (!this.isHost && room.hostHeartbeat && now - room.hostHeartbeat > tenSeconds) {
+                        this.status.textContent = 'L\'hôte s\'est déconnecté';
+                        this.handleDisconnection();
+                    }
                 }
             }
 
             syncGameState() {
-                const rooms = JSON.parse(sessionStorage.getItem(this.serverKey));
+                const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
                 if (!rooms[this.roomCode]) return;
 
                 const room = rooms[this.roomCode];
@@ -474,7 +534,7 @@
                     // L'hôte envoie l'état du jeu
                     room.gameState = { ...this.gameState };
                     room.gameState.lastUpdate = Date.now();
-                    sessionStorage.setItem(this.serverKey, JSON.stringify(rooms));
+                    localStorage.setItem(this.serverKey, JSON.stringify(rooms));
                 } else {
                     // Le client reçoit l'état du jeu
                     if (room.gameState && room.gameState.lastUpdate > this.gameState.lastUpdate) {
@@ -491,7 +551,7 @@
                 } else {
                     room.player2Position = this.gameState.player2.x;
                 }
-                sessionStorage.setItem(this.serverKey, JSON.stringify(rooms));
+                localStorage.setItem(this.serverKey, JSON.stringify(rooms));
 
                 // Recevoir la position de l'autre joueur
                 if (this.isHost && room.player2Position !== undefined) {
@@ -663,6 +723,7 @@
                 this.connectionStatus.className = 'connection-status disconnected';
                 
                 clearInterval(this.connectionInterval);
+                clearInterval(this.heartbeatInterval);
                 this.resetGame();
                 this.status.textContent = 'Connexion perdue. Créez une nouvelle partie.';
             }
@@ -670,7 +731,7 @@
             leaveRoom() {
                 if (!this.roomCode) return;
 
-                const rooms = JSON.parse(sessionStorage.getItem(this.serverKey));
+                const rooms = JSON.parse(localStorage.getItem(this.serverKey) || '{}');
                 if (rooms[this.roomCode]) {
                     if (this.isHost) {
                         // L'hôte supprime la room
@@ -681,7 +742,7 @@
                             p => p !== this.playerId
                         );
                     }
-                    sessionStorage.setItem(this.serverKey, JSON.stringify(rooms));
+                    localStorage.setItem(this.serverKey, JSON.stringify(rooms));
                 }
             }
 
@@ -689,6 +750,7 @@
                 this.leaveRoom();
                 
                 clearInterval(this.connectionInterval);
+                clearInterval(this.heartbeatInterval);
                 this.gameState.score1 = 0;
                 this.gameState.score2 = 0;
                 this.menu.style.display = 'flex';
